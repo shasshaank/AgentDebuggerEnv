@@ -83,8 +83,11 @@ uvicorn env.server:app --host 0.0.0.0 --port 8000
 
 ### 🤖 Running an Agent (OpenEnv Baseline)
 ```bash
-export OPENAI_API_KEY="your_key"
-python inference.py --task easy --model gpt-4o
+export API_BASE_URL="https://api.openai.com/v1"
+export MODEL_NAME="gpt-4o"
+export HF_TOKEN="your_openai_key"
+export ENV_BASE_URL="http://localhost:8000"
+python inference.py
 ```
 
 ---
