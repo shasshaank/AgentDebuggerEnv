@@ -340,10 +340,15 @@ class DebuggerEnvironment:
 
         # Run grader
         grader = get_grader(self._task_config["task_id"])
+        agent_best_tests_passed = (
+            max((a.get("tests_passed", 0) for a in self._all_attempts), default=0)
+            if self._all_attempts else 0
+        )
+
         grader_score = grader.score(
             task_config=self._task_config,
             attempts=self._all_attempts,
-            best_tests_passed=self._best_tests_passed,
+            best_tests_passed=agent_best_tests_passed,
             tests_total=self._task_config["tests_total"],
             attempts_used=self._attempts_used,
             max_attempts=self._task_config["max_attempts"],

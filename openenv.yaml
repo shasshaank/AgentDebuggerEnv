@@ -55,7 +55,7 @@ baseline:
     hard: 0.18
 author: shashaank
 license: MIT
-huggingface_space: shashaank/agentdebugger-env
+huggingface_space: shashaank0707/AgentDebugger-env
 api_base_url_env_var: API_BASE_URL
 model_name_env_var: MODEL_NAME
 hf_token_env_var: HF_TOKEN
