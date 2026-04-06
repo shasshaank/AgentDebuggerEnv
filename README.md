@@ -1,3 +1,13 @@
+---
+title: AgentDebugger Env
+emoji: 📈
+colorFrom: yellow
+colorTo: green
+sdk: docker
+app_port: 8000
+pinned: false
+---
+
 # AgentDebuggerEnv 🐛
 
 > An OpenEnv-compliant environment where AI agents debug broken code through iterative hypothesis-test-fix cycles — benchmarking genuine agentic reasoning, not static code reading.
