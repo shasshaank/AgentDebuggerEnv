@@ -1,102 +1,106 @@
 ---
-title: AgentDebugger Env 🐛
+title: AgentDebugger-Env 🐛
 emoji: 📈
 colorFrom: yellow
 colorTo: green
 sdk: docker
 app_port: 8000
-pinned: false
+pinned: true
+license: mit
 ---
 
 # AgentDebuggerEnv 🐛
 
 > **Benchmarking Agentic Reasoning through the Iterative Hypothesis-Test-Fix Loop.**
 
-An OpenEnv-compliant environment designed for the **Meta + PyTorch + HuggingFace OpenEnv Hackathon**. Unlike static code-repair benchmarks, **AgentDebuggerEnv** focuses on the *trajectory* of an agent's reasoning—measuring how effectively an agent forms hypotheses, observes failures, and iterates toward a solution in a live execution sandbox.
+**AgentDebuggerEnv** is an OpenEnv-compliant benchmarking environment designed for the **Meta + PyTorch + HuggingFace OpenEnv Hackathon**. Unlike static code-repair benchmarks that only measure the final output, AgentDebuggerEnv evaluates the *cognitive trajectory* of an agent: how it forms hypotheses, interprets execution failures, and iterates toward a solution in a secure, live sandbox.
 
 ---
 
-## 🚀 Overview
+## 🚀 The Core Philosophy
 
-Debugging is one of the highest-leverage cognitive tasks in software engineering. Modern LLM agents often struggle with:
--   **Red Herrings**: Following misleading error messages to the wrong function.
--   **Stagnant Iteration**: Repeating the same failed fix attempt instead of updating their hypothesis based on new output.
--   **Concurrency Failures**: Failing to detect or fix non-deterministic bugs (race conditions).
+Traditional benchmarks (like HumanEval or MBPP) are "one-shot": the model sees a prompt and writes code. Real-world engineering is **iterative**.
 
-**AgentDebuggerEnv** makes these failures measurable and scorable. The environment provides a live, sandboxed feedback loop where agents submit complete code fixes and receive real-time execution results.
-
----
-
-## 🛠️ Core Mechanics: The Feedback Loop
-
-The environment follows the standard OpenEnv interface (`reset`, `step`, `state`) but enforces a strict **Hypothesis-Test-Fix** cycle:
-
-1.  **Hypothesis**: The agent must state its theory about the bug before every fix attempt. 
-2.  **Execution**: The submitted code is executed in a secure sandbox with hard timeouts.
-3.  **Observation**: The agent receives the actual `stdout` + `stderr` from the test suite, not just a binary pass/fail.
-4.  **Reward**: Dense reward signal is provided at every step, scaling with test progress and hypothesis accuracy.
+AgentDebuggerEnv forces agents to operate in a **live feedback loop**:
+1.  **Observe**: Analyze existing buggy code and initial test failures.
+2.  **Hypothesize**: Explicitly state a theory about the root cause (scored for accuracy).
+3.  **Act**: Submit a surgical fix or query the environment for more context.
+4.  **Verify**: Observe real-time `stdout/stderr` from a sandboxed test suite execution.
 
 ---
 
-## 📁 Tasks & Difficulty
+## 🛠️ Technical Architecture
 
-The environment includes three standardized tasks designed to test different facets of agentic reasoning:
+### 1. Robust Security Sandbox
+Every submission is executed in a multi-layered isolated environment:
+*   **AST Filtering**: An Abstract Syntax Tree (AST) pass blocks dangerous imports (`os`, `sys`, `subprocess`, etc.) and builtins before execution.
+*   **Process Isolation**: Executes in a separate subprocess with hard memory (256MB) and time (10s) limits.
+*   **Thread Safety**: A specialized "Concurrency Sandbox" allows multi-threaded tests for identifying race conditions while maintaining host security.
 
-| Task | Difficulty | Core Challenge |
-| :--- | :--- | :--- |
-| **Easy** | Easy | **Off-by-One**: Simple logic bug with an explicit, high-signal error message. |
-| **Medium** | Medium | **Red Herring**: Interdependent functions where the error manifests far from the root cause. |
-| **Hard** | Hard | **Race Condition**: A concurrency bug that is invisible to sequential tests. Agent must design a concurrent test to surface it. |
-
----
-
-## ⚙️ How It Works (Spec Compliance)
-
-### Data Models
-- **Observation**: Includes `buggy_code`, `test_suite`, `previous_attempts` (full history), and `current_error_output`.
-- **Action**: Supports `submit_fix` (requires `hypothesis`), `query_context` (for deeper code analysis), and `give_up`.
-- **Reward**: A multi-component reward including `test_progress`, `hypothesis_match`, and `efficiency_bonus`.
-
-### Infrastructure
--   **FastAPI**: Exposes standard endpoints on port 8000.
--   **Docker**: Fully containerized and ready for HuggingFace Spaces.
--   **Security**: Robust AST-based filtering to prevent malicious code escape.
--   **Baseline Script**: Includes a reference `inference.py` script that uses the OpenAI client for benchmark evaluation.
+### 2. High-Fidelity Feedback
+Instead of binary `Pass/Fail` bits, the environment returns the **raw execution stream**. This allows agents to:
+*   Read stack traces.
+*   See partial progress (e.g., "6 passed, 2 failed").
+*   Detect timeouts and resource exhaustion.
 
 ---
 
-## 📦 Quick Start
+## 📁 Task Suite & Reasoning Challenges
 
-### Installation
+| Task | Difficulty | Reasoning Challenge | Why it's hard |
+| :--- | :--- | :--- | :--- |
+| **Easy** | 🟢 Easy | **Off-by-One** | Requires basic logic verification. The error message is high-signal. |
+| **Medium** | 🟡 Medium | **Red Herring** | The symptom (MD5 hashing error) manifests far from the root cause. Agent must trace data flow backward. |
+| **Hard** | 🔴 Hard | **Race Condition** | **Invisible to sequential tests.** The agent must reason that passing tests do *not* mean the code is correct, and design a concurrent stress test. |
+
+---
+
+## 📊 Professional Grading Methodology
+
+Our graders don't just check if the code works at the end. They score the **process**:
+
+*   **Sequential Correctness (40%)**: Does the fix pass the original unit tests?
+*   **Hidden Strength (30%)**: Does the fix survive a high-concurrency (1000-thread) stress test? (Hard task only).
+*   **Hypothesis Accuracy (20%)**: Did the agent correctly identify the bug? (NLP-based keyword matching against ground truth).
+*   **Efficiency Bonus (10%)**: Did the agent solve it within 5 attempts?
+
+---
+
+## ⚙️ Installation & Usage
+
+### 📦 Local Setup
 ```bash
-git clone https://huggingface.co/spaces/shashaank/agentdebugger-env
-cd agentdebugger-env
-pip install -r requirements.txt
+git clone https://huggingface.co/spaces/shashaank0707/AgentDebugger-env
+cd AgentDebugger-env
+pip install -e .
 ```
 
-### Running Locally
+### 🚢 Running the Environment
 ```bash
-# Start the environment server
+# Start the FastAPI server
 uvicorn env.server:app --host 0.0.0.0 --port 8000
+```
 
-# Run the baseline inference (requires API key)
-export API_BASE_URL="https://api.openai.com/v1"
-export MODEL_NAME="gpt-4o"
-export HF_TOKEN="your_key_here"
-python inference.py
+### 🤖 Running an Agent (OpenEnv Baseline)
+```bash
+export OPENAI_API_KEY="your_key"
+python inference.py --task easy --model gpt-4o
 ```
 
 ---
 
-## 📊 Benchmarking Results (GPT-4o Baseline)
+## 🔗 OpenEnv API Compliance
 
-| Task | Grader Score | Solved |
-| :--- | :--- | :--- |
-| Easy | 0.85 | Yes |
-| Medium | 0.50 | Mixed |
-| Hard | 0.18 | No |
+AgentDebuggerEnv implements the full OpenEnv specification:
+
+*   `POST /reset`: Initialize a task (`{"task_id": "medium"}`).
+*   `POST /step`: Submit an `Action` (supports `submit_fix`, `query_context`, `give_up`).
+*   `GET /state`: Retrieve full episode history and current environment state.
+*   `GET /health`: Standard health check for automated uptime monitoring.
 
 ---
 
-## 📜 License
-MIT License. Created by **shashaank** for the Meta / PyTorch / HuggingFace OpenEnv Hackathon.
+## 📜 Metadata & License
+*   **License**: [MIT](LICENSE)
+*   **Author**: shashaank
+*   **Hackathon**: Meta + PyTorch + HuggingFace OpenEnv 2024
