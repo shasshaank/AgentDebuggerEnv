@@ -1,10 +1,9 @@
 """
 AgentDebuggerEnv — Core Environment
 =====================================
-OpenEnv-compliant environment with reset(), step(), state() methods.
-Manages the full debugging episode lifecycle.
-
-NEVER crashes — all errors are returned in info["error"].
+Implementation of the core OpenEnv-compliant environment, managing the 
+debugging episode lifecycle including task initialization, action 
+processing, and reward calculation.
 """
 
 import re

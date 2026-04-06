@@ -1,15 +1,9 @@
 """
 AgentDebuggerEnv — Sandboxed Code Execution
 ============================================
-ALL code execution in the environment must go through execute_code().
-Never call exec() or subprocess directly anywhere else.
-
-Security measures:
-  1. Hard execution timeout (10 seconds)
-  2. AST-based import blocking (not string matching)
-  3. Subprocess isolation
-  4. Clean temp file cleanup in finally block
-  5. Fresh namespace per attempt (no state leaks)
+Isolated execution environment for user-submitted code, providing
+security through AST-based import filtering, subprocess isolation,
+and runtime constraints.
 """
 
 import subprocess

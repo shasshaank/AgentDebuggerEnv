@@ -1,16 +1,13 @@
 """
 AgentDebuggerEnv Baseline Inference Script
 ==========================================
-Filename: inference.py (ROOT directory — not in any subdirectory)
+Baseline evaluation script for testing agent performance in the 
+AgentDebugger environment.
 
-Reads from environment variables (never hardcoded):
-  API_BASE_URL  — LLM API endpoint
-  MODEL_NAME    — Model identifier
-  HF_TOKEN      — API key / HuggingFace token
-
-Uses openai Python client for all LLM calls (hackathon requirement).
-Must complete all 3 tasks in under 20 minutes total.
-Saves results to baseline_results.json on completion.
+System Configuration:
+- API_BASE_URL: LLM API endpoint
+- MODEL_NAME:   Model identifier for evaluation
+- HF_TOKEN:     Authentication token
 """
 
 import os
@@ -58,11 +55,15 @@ Give up (if you cannot find the bug):
   "final_diagnosis": "<your best guess at what the bug was>"
 }
 
-CRITICAL RULES:
-- hypothesis field is REQUIRED in submit_fix — missing it costs reward
-- Submit COMPLETE code files, not diffs or partial functions
-- Read the error output carefully before each attempt — it tells you what changed
-- For concurrent bugs, think about thread safety and atomic operations"""
+Analyze the error output carefully and provide a corrected version of the complete code. 
+You must always include a hypothesis explaining the root cause of the bug before 
+submitting your fix. 
+
+Guidelines:
+- Submit complete source code files, not partial snippets or diffs.
+- Incorporate all feedback from previous execution attempts.
+- For concurrent tasks, ensure atomic operations and proper synchronization.
+"""
 
 
 def parse_action(raw: str) -> dict:

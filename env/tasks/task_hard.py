@@ -1,13 +1,14 @@
 """
 Task Hard — Concurrency Race Condition
 ========================================
-Thread-safe counter with a classic race condition: the read-modify-write cycle
-is split across two separate lock acquisitions instead of being atomic.
+Implementation of a thread-safe counter with a classic race condition. 
+The read-modify-write cycle is non-atomic, leading to inconsistent 
+states under heavy concurrent load.
 
-All 8 sequential tests pass. The bug only manifests under concurrent access.
-The agent must design a concurrent test to surface the race condition.
-
-allow_threading=True for this task.
+Task Configuration:
+- Type: Concurrency / Race Condition
+- Requirements: Proper synchronization and atomicity
+- Execution: Sandbox threading support enabled
 """
 
 TASK_DESCRIPTION = """A thread-safe connection counter used in a web server to track active connections.

@@ -23,7 +23,7 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# Single environment instance (single-session design as per hackathon constraints)
+# Single environment instance to manage the debugging lifecycle.
 env = DebuggerEnvironment()
 
 
@@ -33,7 +33,7 @@ class ResetRequest(BaseModel):
 
 @app.get("/health")
 async def health():
-    """Health check — must return HTTP 200 always. Critical for hackathon Phase 1."""
+    """Health check endpoint to verify server availability."""
     return {"status": "ok", "environment": "agentdebugger-env", "version": "1.0.0"}
 
 

@@ -1,8 +1,8 @@
 """
 AgentDebuggerEnv — Pydantic Data Models
 ========================================
-All models are Pydantic v2 BaseModel subclasses with exact field names
-required by the OpenEnv spec and hackathon validation pipeline.
+Pydantic v2 data models for structured interaction between the agent 
+and the environment, ensuring strict type safety and schema compliance.
 """
 
 from pydantic import BaseModel
