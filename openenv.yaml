@@ -1,0 +1,61 @@
+name: agentdebugger-env
+version: 1.0.0
+description: >
+  A live, iterative debugging environment where AI agents fix broken code
+  by forming hypotheses, submitting fixes, observing test output, and
+  iterating — benchmarking genuine agentic reasoning through a
+  hypothesis-test-fix feedback loop.
+domain: software_engineering
+tags:
+  - debugging
+  - agentic-reasoning
+  - code-repair
+  - openenv
+  - software-engineering
+observation_type: structured
+action_type: structured
+reward_type: dense
+episode_termination: action_or_step_limit
+inference_script: inference.py
+tasks:
+  - id: easy
+    name: Single Function Off-By-One Bug
+    difficulty: easy
+    max_attempts: 5
+    max_steps: 8
+    tests_total: 8
+    description: >
+      Binary search with an off-by-one termination condition.
+      Clear error message, 1-2 iterations expected.
+  - id: medium
+    name: Red Herring — Interdependent Function Bug
+    difficulty: medium
+    max_attempts: 7
+    max_steps: 15
+    tests_total: 10
+    description: >
+      Authentication module where error points to the wrong function.
+      Agent must trace data flow backwards from symptom to root cause.
+  - id: hard
+    name: Concurrency Race Condition
+    difficulty: hard
+    max_attempts: 10
+    max_steps: 25
+    tests_total: 8
+    description: >
+      Thread-safe counter with a race condition invisible to sequential tests.
+      Agent must design a concurrent test to surface the bug, then fix it.
+baseline:
+  model: gpt-4o
+  script: inference.py
+  mean_score: 0.51
+  scores:
+    easy: 0.85
+    medium: 0.50
+    hard: 0.18
+author: shashaank
+license: MIT
+huggingface_space: shashaank/agentdebugger-env
+api_base_url_env_var: API_BASE_URL
+model_name_env_var: MODEL_NAME
+hf_token_env_var: HF_TOKEN

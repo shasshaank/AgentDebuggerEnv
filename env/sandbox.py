@@ -49,7 +49,7 @@ if _marker_pos != -1:
 
 try:
     _tree = _ast.parse(_source_to_check)
-except _ast.SyntaxError:
+except SyntaxError:
     pass  # Let the actual execution catch syntax errors
 else:
     for _node in _ast.walk(_tree):
