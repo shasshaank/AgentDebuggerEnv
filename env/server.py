@@ -28,7 +28,7 @@ env = DebuggerEnvironment()
 
 
 class ResetRequest(BaseModel):
-    task_id: str
+    task_id: Optional[str] = "easy"
 
 
 @app.get("/health")
@@ -38,10 +38,11 @@ async def health():
 
 
 @app.post("/reset")
-async def reset(request: ResetRequest):
-    """Start a fresh episode. Returns initial Observation."""
+async def reset(request: Optional[ResetRequest] = None):
+    """Start a fresh episode. Returns initial Observation. Default to 'easy' task if body is missing."""
     try:
-        observation = env.reset(request.task_id)
+        task_id = request.task_id if request else "easy"
+        observation = env.reset(task_id)
         return JSONResponse(content=observation, status_code=200)
     except ValueError as e:
         return JSONResponse(
