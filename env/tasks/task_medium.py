@@ -16,49 +16,6 @@ and authenticate_user. Some tests are failing with errors pointing to authentica
 when it should return True. The module handles password hashing with MD5, password validation by comparing 
 hashes, and user authentication against a user database. Debug the module to make all tests pass."""
 
-BUGGY_CODE = '''import hashlib
-
-def hash_password(password: str) -> str:
-    """Hash a password using MD5 and return the hex digest string."""
-    password_bytes = password.encode('utf-8')
-    hash_obj = hashlib.md5(password_bytes)
-    # BUG: str() wrapping of bytes adds "b'" prefix and "'" suffix
-    return str(hash_obj.digest().hex())  # Looks correct but the intermediate .digest().hex() 
-    # differs subtly from .hexdigest() in edge cases involving the str() conversion path
-
-def validate_password(password: str, stored_hash: str) -> bool:
-    """Check if password matches the stored hash."""
-    computed_hash = hash_password(password)
-    return computed_hash == stored_hash
-
-def authenticate_user(username: str, password: str, user_db: dict) -> bool:
-    """Authenticate a user against the database.
-    
-    Args:
-        username: The username to authenticate
-        password: The password to validate
-        user_db: Dict mapping usernames to {'password_hash': str, 'active': bool}
-    
-    Returns:
-        True if user exists, is active, and password matches
-    """
-    if username not in user_db:
-        return False
-    user = user_db[username]
-    if not user.get('active', False):
-        return False
-    return validate_password(password, user['password_hash'])
-'''
-
-# The actual bug we'll introduce: the hash function uses a different path
-# When user_db entries are created with hashlib.md5().hexdigest() directly,
-# but hash_password uses str(hashlib.md5().digest().hex()), the results differ
-# because digest().hex() and hexdigest() should be the same, BUT we make the bug
-# more obvious: hash_password actually does str(bytes(hexdigest, 'utf-8')) which
-# adds the b'' wrapping.
-
-# Let me redesign: the bug is that hash_password converts to bytes then back to str
-# which adds "b'" prefix. The user_db stores hashes created by a DIFFERENT code path.
 
 BUGGY_CODE = '''import hashlib
 

@@ -48,7 +48,12 @@ class MediumGrader(BaseGrader):
         ground_truth = task_config["ground_truth"]
 
         # 1. Test pass ratio (weight: 0.60)
-        test_pass_ratio = (best_tests_passed / tests_total) if tests_total > 0 else 0.0
+
+        if attempts:
+            agent_best = max(a.get("tests_passed",0) for a in attempts)
+        else:
+            agent_best = 0
+        test_pass_ratio = (agent_best / tests_total) if tests_total > 0 else 0.0
         test_score = test_pass_ratio * 0.60
 
         # 2. Efficiency bonus (weight: 0.20)

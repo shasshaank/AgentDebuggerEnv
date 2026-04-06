@@ -31,6 +31,78 @@ class ResetRequest(BaseModel):
     task_id: Optional[str] = "easy"
 
 
+@app.get("/")
+async def root():
+    return {
+        "name": "AgentDebuggerEnv",
+        "version": "1.0.0",
+        "description": (
+            "An OpenEnv-compliant environment where AI agents debug broken code "
+            "through iterative hypothesis-test-fix cycles. Unlike static benchmarks, "
+            "agents act in a live sandbox and observe real execution output each step."
+        ),
+        "openenv_compliant": True,
+        "domain": "software_engineering",
+        "endpoints": {
+            "GET  /":        "This overview",
+            "GET  /health":  "Health check — returns 200 if server is live",
+            "GET  /tasks":   "List all available tasks with metadata",
+            "GET  /state":   "Current episode state",
+            "POST /reset":   "Start a new episode. Body: {\"task_id\": \"easy\"|\"medium\"|\"hard\"}",
+            "POST /step":    "Submit one action. Body: Action JSON",
+        },
+        "tasks": list_tasks(),
+        "reward_type": "dense",
+        "action_types": ["submit_fix", "query_context", "give_up"],
+    }
+
+
+@app.get("/tasks")
+async def get_tasks():
+    return {
+        "tasks": [
+            {
+                "id": "easy",
+                "name": "Single Function Off-By-One Bug",
+                "difficulty": "easy",
+                "max_attempts": 5,
+                "max_steps": 8,
+                "tests_total": 8,
+                "description": (
+                    "Binary search with an off-by-one termination condition. "
+                    "Error message is clear and high-signal. 1-2 iterations expected."
+                ),
+            },
+            {
+                "id": "medium",
+                "name": "Red Herring Authentication Bug",
+                "difficulty": "medium",
+                "max_attempts": 7,
+                "max_steps": 15,
+                "tests_total": 10,
+                "description": (
+                    "Authentication module where the error message points to the wrong "
+                    "function. Agent must trace data flow backwards from symptom to root cause "
+                    "and resist the red herring."
+                ),
+            },
+            {
+                "id": "hard",
+                "name": "Concurrency Race Condition",
+                "difficulty": "hard",
+                "max_attempts": 10,
+                "max_steps": 25,
+                "tests_total": 8,
+                "description": (
+                    "Thread-safe counter with a race condition invisible to all sequential tests. "
+                    "Agent must recognize that passing tests are insufficient proof of correctness, "
+                    "design a concurrent stress test to surface the bug, then fix the atomicity issue."
+                ),
+            },
+        ]
+    }
+
+
 @app.get("/health")
 async def health():
     """Health check endpoint to verify server availability."""
