@@ -179,8 +179,13 @@ def run_episode(task_id: str) -> dict:
     last_result = {"reward": {"grader_score": 0.0, "cumulative_reward": 0.0}, "observation": obs}
     action = {}
 
+    max_steps = obs.get("max_steps",25)
+    step_count = 0
     while not done:
-        # Get LLM action using the robust helper
+        step_count+=1
+        if(step_count>max_steps+5):
+            print(f"[!] Safety limit reached, breaking loop")
+            break
         try:
             raw = get_completion(messages)
             if not raw:
@@ -241,7 +246,7 @@ def main():
     print(f"Env:      {ENV_BASE_URL}")
     
     if not has_token and "openai.com" in API_BASE_URL:
-        print("WARNING: HF_TOKEN is missing but using default OpenAI endpoint. This may fail.")
+        print("WARNING: HF_TOKEN is missing. API calls will likely fail.")
     
     print("=" * 55)
 
