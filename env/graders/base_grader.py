@@ -50,5 +50,5 @@ class BaseGrader(ABC):
         return False
 
     def _clamp(self, value: float) -> float:
-        """Clamp a value to [0.0, 1.0]."""
-        return max(0.0, min(1.0, value))
+        """Clamp a value to (0.0, 1.0)."""
+        return max(0.01, min(0.99, value))
