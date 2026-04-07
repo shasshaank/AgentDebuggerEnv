@@ -170,6 +170,9 @@ def run_episode(task_id: str) -> dict:
     reset_resp.raise_for_status()
     obs = reset_resp.json()
 
+    # [START] task=NAME
+    print(f"[START] task={task_id}", flush=True)
+
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user",   "content": build_initial_message(obs)}
@@ -211,6 +214,9 @@ def run_episode(task_id: str) -> dict:
         info   = result["info"]
         last_result = result
 
+        # [STEP] step=N reward=R
+        print(f"[STEP] step={obs['step_number']} reward={reward['step_reward']}", flush=True)
+
         # Build context for next LLM call
         step_msg = build_step_message(obs, reward, info)
         messages.append({"role": "assistant", "content": raw})
@@ -220,7 +226,7 @@ def run_episode(task_id: str) -> dict:
             break
 
     final_obs = last_result["observation"]
-    return {
+    result = {
         "task_id":             task_id,
         "grader_score":        last_result["reward"]["grader_score"],
         "cumulative_reward":   last_result["reward"]["cumulative_reward"],
@@ -231,6 +237,11 @@ def run_episode(task_id: str) -> dict:
         "solved":              final_obs["tests_passed"] == final_obs["tests_total"],
         "final_action_type":   action.get("action_type", "unknown")
     }
+
+    # [END] task=NAME score=S steps=N
+    print(f"[END] task={task_id} score={result['grader_score']} steps={result['steps_taken']}", flush=True)
+
+    return result
 
 
 def main():

@@ -44,3 +44,5 @@ baseline_results.json
 # Temp sandbox files (should clean up but just in case)
 sandbox_*.py
 /tmp/sandbox_*
+
+instructions.md
