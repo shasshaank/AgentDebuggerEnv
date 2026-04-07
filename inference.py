@@ -14,7 +14,8 @@ import os
 import json
 import time
 import re
-from openai import OpenAI
+import random
+from openai import OpenAI, APIError, RateLimitError, APIConnectionError, APITimeoutError
 import requests
 
 # ── Environment variables (never hardcode these) ──────────────────────────────
@@ -64,6 +65,37 @@ Guidelines:
 - Incorporate all feedback from previous execution attempts.
 - For concurrent tasks, ensure atomic operations and proper synchronization.
 """
+
+# ── Robust API Completion Helper ──────────────────────────────────────────────
+
+def get_completion(messages: list, model: str = MODEL_NAME, max_retries: int = 5) -> str:
+    """Gets LLM completion with exponential backoff and retry logic."""
+    for attempt in range(max_retries):
+        try:
+            completion = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                max_tokens=1200,
+                temperature=0.2,
+                timeout=60.0  # Add a timeout to prevent hanging forever
+            )
+            return completion.choices[0].message.content
+        except (RateLimitError, APIConnectionError, APITimeoutError) as e:
+            if attempt == max_retries - 1:
+                raise e
+            wait_time = (2 ** attempt) + random.random()
+            print(f"  [!] API Error ({type(e).__name__}). Retrying in {wait_time:.1f}s... (Attempt {attempt+1}/{max_retries})")
+            time.sleep(wait_time)
+        except APIError as e:
+            # For general API errors, log and potentially retry if it's a 5xx
+            print(f"  [!] OpenAI API Error: {e}")
+            if attempt == max_retries - 1:
+                raise e
+            time.sleep(2)
+        except Exception as e:
+            print(f"  [!] Unexpected error during completion: {e}")
+            raise e
+    return ""
 
 
 def parse_action(raw: str) -> dict:
@@ -148,15 +180,20 @@ def run_episode(task_id: str) -> dict:
     action = {}
 
     while not done:
-        # Get LLM action
-        completion = client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=messages,
-            max_tokens=1200,
-            temperature=0.2
-        )
-        raw = completion.choices[0].message.content
-        action = parse_action(raw)
+        # Get LLM action using the robust helper
+        try:
+            raw = get_completion(messages)
+            if not raw:
+                raise ValueError("Empty response from LLM")
+            action = parse_action(raw)
+        except Exception as e:
+            print(f"  [✗] Failed to get response from LLM after retries: {e}")
+            # Fallback action to avoid crashing the whole episode
+            action = {
+                "action_type": "give_up",
+                "final_diagnosis": f"Inference system failure: {str(e)}"
+            }
+            raw = json.dumps(action)
 
         # Submit action to environment
         step_resp = requests.post(f"{ENV_BASE_URL}/step", json=action)
@@ -193,9 +230,19 @@ def run_episode(task_id: str) -> dict:
 
 def main():
     print("AgentDebuggerEnv — Baseline Inference")
+    
+    # ── Environment validation ────────────────────────────────────────────────
+    has_token = bool(HF_TOKEN and len(HF_TOKEN) > 5)
+    masked_token = f"{HF_TOKEN[:4]}...{HF_TOKEN[-4:]}" if has_token else "MISSING"
+    
     print(f"Model:    {MODEL_NAME}")
     print(f"API:      {API_BASE_URL}")
+    print(f"Token:    {masked_token}")
     print(f"Env:      {ENV_BASE_URL}")
+    
+    if not has_token and "openai.com" in API_BASE_URL:
+        print("WARNING: HF_TOKEN is missing but using default OpenAI endpoint. This may fail.")
+    
     print("=" * 55)
 
     results    = []
@@ -204,7 +251,22 @@ def main():
     for task_id in ["easy", "medium", "hard"]:
         print(f"\nTask: {task_id}")
         t0     = time.time()
-        result = run_episode(task_id)
+        try:
+            result = run_episode(task_id)
+        except Exception as e:
+            print(f"  [✗] Error running episode '{task_id}': {e}")
+            result = {
+                "task_id": task_id,
+                "grader_score": 0.0,
+                "cumulative_reward": 0.0,
+                "steps_taken": 0,
+                "attempts_used": 0,
+                "tests_passed": 0,
+                "tests_total": 0,
+                "solved": False,
+                "final_action_type": "error"
+            }
+        
         elapsed = time.time() - t0
 
         solved_str = "✓ SOLVED" if result["solved"] else "✗ UNSOLVED"
