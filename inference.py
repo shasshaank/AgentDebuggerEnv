@@ -82,7 +82,7 @@ def get_completion(messages: list, model: str = MODEL_NAME, max_retries: int = 5
             return completion.choices[0].message.content
         except (RateLimitError, APIConnectionError, APITimeoutError) as e:
             if attempt == max_retries - 1:
-                raise e
+                return ""
             wait_time = (2 ** attempt) + random.random()
             print(f"  [!] API Error ({type(e).__name__}). Retrying in {wait_time:.1f}s... (Attempt {attempt+1}/{max_retries})")
             time.sleep(wait_time)
@@ -90,11 +90,11 @@ def get_completion(messages: list, model: str = MODEL_NAME, max_retries: int = 5
             # For general API errors, log and potentially retry if it's a 5xx
             print(f"  [!] OpenAI API Error: {e}")
             if attempt == max_retries - 1:
-                raise e
+                return ""
             time.sleep(2)
         except Exception as e:
             print(f"  [!] Unexpected error during completion: {e}")
-            raise e
+            return ""
     return ""
 
 
@@ -166,7 +166,7 @@ def run_episode(task_id: str) -> dict:
     """Run one complete debugging episode. Returns result dict."""
 
     # Reset environment
-    reset_resp = requests.post(f"{ENV_BASE_URL}/reset", json={"task_id": task_id})
+    reset_resp = requests.post(f"{ENV_BASE_URL}/reset", json={"task_id": task_id}, timeout=60)
     reset_resp.raise_for_status()
     obs = reset_resp.json()
 
@@ -201,7 +201,7 @@ def run_episode(task_id: str) -> dict:
             raw = json.dumps(action)
 
         # Submit action to environment
-        step_resp = requests.post(f"{ENV_BASE_URL}/step", json=action)
+        step_resp = requests.post(f"{ENV_BASE_URL}/step", json=action, timeout=60)
         step_resp.raise_for_status()
         result = step_resp.json()
 
