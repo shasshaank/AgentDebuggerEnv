@@ -22,7 +22,6 @@ BLOCKED_IMPORTS = [
 ]
 
 EXECUTION_TIMEOUT_SECONDS = 15
-MEMORY_LIMIT_MB = 256
 
 
 def _build_import_checker(blocked: list[str]) -> str:

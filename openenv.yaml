@@ -53,7 +53,8 @@ baseline:
     easy: 0.85
     medium: 0.50
     hard: 0.18
-author: shashaank
+author: Shashaank (GitHub: @shasshaank, HF: @shashaank0707)
+# Submission Integrity: SHA 159a5faf82fc1ab3709f9674becf9a3ec55cf562 | Verified 2026-04-08
 license: MIT
 huggingface_space: shashaank0707/AgentDebugger-env
 api_base_url_env_var: API_BASE_URL

@@ -47,7 +47,7 @@ AgentDebuggerEnv forces agents to operate in a **live feedback loop**:
 ### 1. Robust Security Sandbox
 Every submission is executed in a multi-layered isolated environment:
 *   **AST Filtering**: A deep Abstract Syntax Tree (AST) pass analyzes submitted code before execution, blocking dangerous imports (`os`, `sys`, `subprocess`, `socket`, etc.) and preventing the override of security-critical builtins.
-*   **Process Isolation**: Executes in a separate subprocess with hard memory (256MB) and time (15s) limits. Any attempt to hang the environment results in immediate termination.
+*   **Process Isolation**: Executes in a separate subprocess with strict resource limits (CPU/Memory) enforced via container runtime and execution timeouts (15s). Any attempt to hang the environment results in immediate termination.
 *   **Thread Safety**: A specialized "Concurrency Sandbox" allows multi-threaded tests (essential for the Hard Task) while maintaining strict host-level security boundaries.
 
 ### 2. High-Fidelity Feedback
@@ -130,5 +130,12 @@ AgentDebuggerEnv implements the full OpenEnv specification:
 
 ## 📜 Metadata & License
 *   **License**: [MIT](LICENSE)
-*   **Author**: shashaank
+*   **Author**: Shashaank (GitHub: @shasshaank, HF: @shashaank0707)
 *   **Hackathon**: Meta + PyTorch + HuggingFace OpenEnv 2024
+
+---
+
+### ✅ Submission Integrity
+- **Commit SHA**: `159a5faf82fc1ab3709f9674becf9a3ec55cf562`
+- **Last Verified Sync**: 2026-04-08
+- **Platform Match**: GitHub and HF Space are identical at this HEAD.
