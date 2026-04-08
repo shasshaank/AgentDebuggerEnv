@@ -21,7 +21,7 @@ BLOCKED_IMPORTS = [
     "ctypes", "cffi", "resource", "signal", "mmap", "gc"
 ]
 
-EXECUTION_TIMEOUT_SECONDS = 10
+EXECUTION_TIMEOUT_SECONDS = 15
 MEMORY_LIMIT_MB = 256
 
 

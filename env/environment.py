@@ -249,7 +249,7 @@ class DebuggerEnvironment:
 
     def _handle_query_context(self, action: Action) -> Dict[str, Any]:
         """Handle query_context action."""
-        valid_query_types = ["function_signature", "related_code", "error_explanation", "test_details"]
+        valid_query_types = ["function_signature", "related_code", "error_explanation", "test_details", "test_suggestion"]
 
         if action.query_type not in valid_query_types:
             return self._make_response(
@@ -511,5 +511,22 @@ class DebuggerEnvironment:
                     return f"Test details for '{query_target}':\n" + "\n".join(relevant)
 
             return f"Full test suite:\n{test_suite}"
+        
+        elif query_type == "test_suggestion":
+            # Provide a specific hint for the hard task if they ask
+            if task["task_id"] == "hard":
+                return (
+                    "HINT: The sequential tests pass, but have you considered testing with "
+                    "concurrent threads? There might be a race condition that only appears "
+                    "under load. Try writing a test that uses 'threading' to call methods "
+                    "simultaneously."
+                )
+            elif task["task_id"] == "medium":
+                return (
+                    "HINT: Don't trust the first error message you see. Trace the data flow "
+                    "backwards to see where the invalid input was actually generated."
+                )
+            else:
+                return "HINT: Look closely at the comparison operators and loop boundaries."
 
         return "No information available for this query."

@@ -17,6 +17,19 @@ license: mit
 
 ---
 
+## 📊 Baseline Performance
+
+Tested with **GPT-4o** using the standard `inference.py` script:
+
+- **Easy (0.85)**: Solved in 1-2 attempts; clear signal from error output.
+- **Medium (0.50)**: Solved in ~4 attempts; agents must resist a red-herring authentication error.
+- **Hard (0.18)**: Rarely solved; agents must proactively design concurrent tests to surface the hidden race condition.
+- **Mean Score: 0.51**
+
+*Measurements taken over multiple runs to account for LLM variance. See `openenv.yaml` for full metadata.*
+
+---
+
 ## 🚀 The Core Philosophy
 
 Traditional benchmarks (like HumanEval or MBPP) are "one-shot": the model sees a prompt and writes code. Real-world engineering is **iterative**.
@@ -33,9 +46,9 @@ AgentDebuggerEnv forces agents to operate in a **live feedback loop**:
 
 ### 1. Robust Security Sandbox
 Every submission is executed in a multi-layered isolated environment:
-*   **AST Filtering**: An Abstract Syntax Tree (AST) pass blocks dangerous imports (`os`, `sys`, `subprocess`, etc.) and builtins before execution.
-*   **Process Isolation**: Executes in a separate subprocess with hard memory (256MB) and time (10s) limits.
-*   **Thread Safety**: A specialized "Concurrency Sandbox" allows multi-threaded tests for identifying race conditions while maintaining host security.
+*   **AST Filtering**: A deep Abstract Syntax Tree (AST) pass analyzes submitted code before execution, blocking dangerous imports (`os`, `sys`, `subprocess`, `socket`, etc.) and preventing the override of security-critical builtins.
+*   **Process Isolation**: Executes in a separate subprocess with hard memory (256MB) and time (15s) limits. Any attempt to hang the environment results in immediate termination.
+*   **Thread Safety**: A specialized "Concurrency Sandbox" allows multi-threaded tests (essential for the Hard Task) while maintaining strict host-level security boundaries.
 
 ### 2. High-Fidelity Feedback
 Instead of binary `Pass/Fail` bits, the environment returns the **raw execution stream**. This allows agents to:
@@ -89,6 +102,18 @@ export HF_TOKEN="your_openai_key"
 export ENV_BASE_URL="http://localhost:8000"
 python inference.py
 ```
+
+---
+
+### 🔐 Environment Variables
+
+| Variable | Description | Standard Fallback |
+| :--- | :--- | :--- |
+| `API_BASE_URL` | LLM API endpoint | `https://api.openai.com/v1` |
+| `MODEL_NAME` | Model to evaluate | `gpt-4o` |
+| `HF_TOKEN` | Auth token (or OpenAI key) | — |
+| `OPENAI_API_KEY` | Alternative auth token | — |
+| `ENV_BASE_URL` | Address of the FastAPI server | `http://localhost:8000` |
 
 ---
 
