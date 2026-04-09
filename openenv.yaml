@@ -46,14 +46,14 @@ tasks:
       Thread-safe counter with a race condition invisible to sequential tests.
       Agent must design a concurrent test to surface the bug, then fix it.
 baseline:
-  model: gpt-4o
+  model: meta-llama/Llama-3.1-70B-Instruct
   script: inference.py
   mean_score: 0.51
   scores:
     easy: 0.85
     medium: 0.50
     hard: 0.18
-author: Shashaank (GitHub: @shasshaank, HF: @shashaank0707)
+author: "Shashaank (GitHub: @shasshaank, HF: @shashaank0707)"
 # Submission Integrity: SHA 159a5faf82fc1ab3709f9674becf9a3ec55cf562 | Verified 2026-04-08
 license: MIT
 huggingface_space: shashaank0707/AgentDebugger-env
