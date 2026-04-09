@@ -123,7 +123,7 @@ The agent must: recognize that 8/8 passing tests do not prove correctness for co
 
 **Hard task grader breakdown:**
 - Sequential tests pass (agent submissions only): **0.40**
-- 1000-thread concurrent stress test passes (run 3×, must pass all 3): **0.30**
+- 1000-thread concurrent stress test passes (run 5×, must pass >=4 for full credit): **0.30**
 - Hypothesis accuracy (mentions "race condition", "atomic", "lock"): **0.20**
 - Efficiency bonus (fixed within 5 attempts): **0.10**
 
@@ -170,9 +170,9 @@ early_solve_bonus  = 0.05 if solved within ceil(max_attempts / 3) attempts
 
 Every `submit_fix` action executes agent-generated Python code. All execution routes through `env/sandbox.py` — never via raw `exec()` anywhere in the codebase.
 
-**Layer 1 — AST Import Filtering:** Before execution, an AST walk detects blocked imports (`os`, `sys`, `subprocess`, `socket`, `importlib`, `shutil`, `pathlib`, `pickle`, `ctypes`, `multiprocessing`, and others). Uses `ast.parse()` + `ast.walk()` — not string matching, which can be bypassed.
+**Layer 1 — AST Import & Attribute Filtering:** Before execution, an AST walk detects blocked imports and prevents access to any attribute starting with an underscore (`_`). This blocks private member access and dunder escapes (like `__class__`).
 
-**Layer 2 — Subprocess Isolation:** Code runs in a child subprocess with a stripped environment. Even if the AST filter is bypassed, the subprocess cannot affect the server process.
+**Layer 2 — Subprocess Isolation:** Code runs in a child subprocess with a stripped environment and no network access.
 
 **Layer 3 — Hard Timeout:** Every execution killed after 10 seconds. Infinite loops in submitted code return `timed_out: True` and a `-0.10` step reward.
 
@@ -342,7 +342,7 @@ AgentDebuggerEnv/
 
 **Why recalculate `test_pass_ratio` from the attempts list?** The medium buggy code passes 6/10 tests and the hard buggy code passes 8/8 tests sequentially. If the grader used the environment's `best_tests_passed` (which includes the initial buggy code run at reset), a dummy agent that submits nothing would score 0.36 and 0.40 for free. Recalculating from the `attempts` list guarantees the score floor is 0.0.
 
-**Why run the concurrent stress test 3 times?** Race conditions are non-deterministic. A partial fix that narrows the race window may pass once by luck. Requiring all 3 runs to pass filters out lucky partial fixes. Passing 1 of 3 gives 0.15 — partial credit for progress, not full credit.
+**Why run the concurrent stress test 5 times?** Race conditions are non-deterministic. A partial fix that narrows the race window may pass once by luck. Requiring 4 of 5 runs to pass provides a robust statistical threshold that filters out lucky partial fixes while allowing for minor runner jitter. Passing 2 of 5 gives 0.15 — partial credit for progress.
 
 **Why not use pytest directly?** Using pytest as the test runner makes output parsing dependent on pytest's version and output format. The environment uses a lightweight custom test runner embedded as a Python string, producing a consistent `"N passed, M failed"` format that `_parse_tests_passed()` can reliably parse across all platforms and environments.
 
