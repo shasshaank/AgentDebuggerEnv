@@ -62,19 +62,12 @@ The hard task is specifically designed so that frontier models fail most of the 
 
 ---
 
-## The Four Agent Failure Modes This Environment Measures
+All four failure modes produce distinct, interpretable score components in the `breakdown` field of every `Reward` response:
 
-These are real, documented failure modes in LLM agents. AgentDebuggerEnv makes all four measurable and independently scorable for the first time:
-
-**1. Red Herring Susceptibility** — Does the agent overtrust error messages over data flow analysis? The medium task's error points directly to `authenticate_user`, which is completely correct. The bug is in `hash_password`. An agent that follows the red herring scores 0.0 on hypothesis accuracy even if it eventually stumbles onto the right fix.
-
-**2. Stagnation Under Uncertainty** — Does the agent repeat the same failed fix instead of updating its hypothesis? The `-0.05` stagnation penalty and `hypothesis_accuracy` score together capture this. Submitting the same code twice costs reward twice.
-
-**3. Exploration vs. Exploitation** — The `query_context` action costs a step but provides information. The first query is free; subsequent queries cost `-0.05`. Agents that query productively before attempting a fix demonstrate better exploration behavior than those that blindly submit fixes.
-
-**4. Test-Suite as Sufficient Proof** — The hard task tests whether an agent knows when passing tests are not enough. All 8 sequential tests pass on the buggy code. An agent that sees this and concludes the code is correct — without reasoning about concurrency — scores at most 0.40 and fails the most important grader component (the concurrent stress test worth 0.30).
-
-All four failure modes produce distinct, interpretable score components in the `breakdown` field of every `Reward` response, making this environment useful as a diagnostic tool, not just a benchmark.
+*   **Red Herring Susceptibility**: Does the agent overtrust error messages (Medium Task symptom) or trace data flow to the root?
+*   **Stagnation**: Does the agent repeat failed fixes? Prohibited by the `-0.05` stagnation penalty.
+*   **Exploration/Exploitation**: Measures if agents query for context productively before attempting fixes.
+*   **Test-Suite Overconfidence**: Detects if an agent fails to reason about concurrency when sequential tests pass (Hard Task).
 
 ---
 
@@ -187,37 +180,27 @@ Every `submit_fix` action executes agent-generated Python code. All execution ro
 ```python
 class Observation(BaseModel):
     task_id: str                          # "easy" | "medium" | "hard"
-    task_description: str
-    buggy_code: str                       # Original broken code — always visible
-    test_suite: str                       # Full test file
-    initial_error_output: str            # Sandbox output on buggy code at reset()
-    current_code: str                    # Most recent submitted code
-    current_error_output: str            # Test output on current_code
-    tests_passed: int
-    tests_total: int
-    previous_attempts: List[FixAttempt]  # Full episode history
+    buggy_code: str                       # Original broken code
+    test_suite: str                       # Full test file content
+    current_code: str                     # Most recent submitted code
+    current_error_output: str             # Sandbox stdout/stderr output
+    tests_passed: int                
     attempts_remaining: int
     max_attempts: int
-    step_number: int
-    max_steps: int
     done: bool
-    score_estimate: float                # Running grader estimate shown to agent
-    hint_used: bool
+    score_estimate: float                 # Running grader estimate
 
 class Action(BaseModel):
-    action_type: str          # "submit_fix" | "query_context" | "give_up"
-    fixed_code: Optional[str]           # Complete corrected code (not a diff)
-    hypothesis: Optional[str]           # REQUIRED with submit_fix — missing costs -0.10
-    query_type: Optional[str]           # "function_signature" | "related_code"
-                                        # | "error_explanation" | "test_details"
-    query_target: Optional[str]
-    final_diagnosis: Optional[str]      # Used with give_up
+    action_type: str                      # "submit_fix" | "query_context" | "give_up"
+    fixed_code: Optional[str]             # Complete corrected code
+    hypothesis: Optional[str]             # Theory about the bug (required for submit)
+    query_type: Optional[str]             # "function_signature" | "error_explanation" etc.
 
 class Reward(BaseModel):
-    step_reward: float         # This step: range -1.0 to +1.0
-    cumulative_reward: float   # Episode total so far
-    grader_score: float        # 0.0 during episode; official score on terminal step
-    breakdown: Dict[str, float]  # Itemized components for interpretability
+    step_reward: float                    # Dense signal: range -1.0 to +1.0
+    cumulative_reward: float 
+    grader_score: float                   # Official score (terminal step only)
+    breakdown: Dict[str, float]           # Itemized components
 ```
 
 ---
@@ -238,7 +221,7 @@ tasks:
   - {id: hard,   difficulty: hard,   max_steps: 25, max_attempts: 10}
 ```
 
-All endpoints return HTTP 200 always — errors go in the response body under `info["error"]`, never as HTTP 4xx/5xx. This ensures automated evaluation never sees a failed HTTP response.
+Application-level errors are returned in `info.error` inside the response body. Core evaluation endpoints are designed to avoid 4xx/5xx status codes for agent-level mistakes, ensuring the evaluation flow is never interrupted by network-level exceptions.
 
 | Endpoint | Method | Description |
 |---|---|---|
@@ -303,9 +286,9 @@ python inference.py
 
 | Variable | Description | Default |
 |---|---|---|
-| `API_BASE_URL` | LLM API endpoint | `https://api.openai.com/v1` |
-| `MODEL_NAME` | Model identifier | `gpt-4o` |
-| `HF_TOKEN` | API key / HuggingFace token | — |
+| `API_BASE_URL` | LLM API endpoint | `https://router.huggingface.co/v1` |
+| `MODEL_NAME` | Model identifier | `meta-llama/Llama-3.1-70B-Instruct` |
+| `HF_TOKEN` | Hugging Face Token (Read) | — |
 | `ENV_BASE_URL` | Environment server address | `http://localhost:8000` |
 
 ---
@@ -364,6 +347,6 @@ AgentDebuggerEnv/
 
 ## Submission Integrity
 
-- **Commit SHA:** `e93446da6e57b3f582db65a947dc0abef18e66c6`
+- **Commit SHA:** `5c507c313ff2c209d7b770af6f08cf6ed6ab1568`
 - **Last Verified Sync:** 2026-04-09
 - **Platform Match:** GitHub and HF Space are in sync at this HEAD
