@@ -26,6 +26,7 @@ import random
 import subprocess
 import tempfile
 import shutil
+from importlib import metadata
 
 # ── Parse args ────────────────────────────────────────────────────────────────
 parser = argparse.ArgumentParser()
@@ -36,9 +37,15 @@ parser.add_argument("--resume", type=str, default=None, help="Path to checkpoint
 parser.add_argument("--max_steps", type=int, default=500)
 args = parser.parse_args()
 
-# ── Install dependencies (for Colab/HF Spaces) ───────────────────────────────
-if os.environ.get("COLAB_RELEASE_TAG") or os.environ.get("SPACE_ID"):
-    os.system("pip install -q trl wandb datasets bitsandbytes>=0.43 peft>=0.10 transformers>=4.40 accelerate>=0.30")
+# ── Optional dependency bootstrap (disabled by default in Spaces) ─────────────
+# Runtime installs with loose versions caused repeated breakages from version drift.
+# Keep this opt-in for fresh Colab notebooks only.
+if os.environ.get("FORCE_BOOTSTRAP_DEPS") == "1":
+    os.system(
+        f"{sys.executable} -m pip install -q "
+        "wandb==0.18.7 datasets==3.0.2 transformers==4.46.3 "
+        "accelerate==1.0.1 trl==0.12.2 bitsandbytes==0.43.3 peft==0.13.2"
+    )
 
 # ── GPU/training imports (skipped in --test-local mode) ───────────────────────
 if not args.test_local:
@@ -50,6 +57,23 @@ if not args.test_local:
     )
     from peft import get_peft_model, LoraConfig, TaskType
     from trl import GRPOTrainer, GRPOConfig
+
+    def _pkg_ver(name: str) -> str:
+        try:
+            return metadata.version(name)
+        except metadata.PackageNotFoundError:
+            return "not-installed"
+
+    print(
+        "Runtime package versions | "
+        f"python={sys.version.split()[0]} "
+        f"torch={_pkg_ver('torch')} "
+        f"transformers={_pkg_ver('transformers')} "
+        f"trl={_pkg_ver('trl')} "
+        f"accelerate={_pkg_ver('accelerate')} "
+        f"peft={_pkg_ver('peft')} "
+        f"bitsandbytes={_pkg_ver('bitsandbytes')}"
+    )
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from server.reward_calculator import DebugRewardCalculator
