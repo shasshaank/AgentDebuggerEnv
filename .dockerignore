@@ -1,0 +1,25 @@
+.git
+.gitignore
+.DS_Store
+.venv
+.pytest_cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+
+# Local artifacts / logs
+wandb
+checkpoints
+final_model
+*.log
+
+# Build and packaging metadata
+*.egg-info
+dist
+build
+
+# Editor / tooling
+.cursor
+.vscode
+
