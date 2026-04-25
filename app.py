@@ -21,7 +21,7 @@ def _stream_training():
     global training_proc
     script = os.path.join(os.path.dirname(__file__), "training", "train_grpo.py")
     training_proc = subprocess.Popen(
-        [sys.executable, script],
+        [sys.executable, script, "--test"],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
