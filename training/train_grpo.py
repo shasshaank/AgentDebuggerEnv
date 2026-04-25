@@ -1,8 +1,8 @@
 """
 AgentDebuggerEnv — GRPO Training Script
-Model: Qwen2.5-Coder-7B-Instruct (4-bit quantized via Unsloth)
+Model: Qwen2.5-Coder-7B-Instruct (4-bit quantized via bitsandbytes)
 Algorithm: GRPO (Group Relative Policy Optimization) via HuggingFace TRL
-GPU: HuggingFace ZeroGPU H200 (free) or paid HF Spaces A10G
+GPU: Kaggle P100 (16GB) — float16 only, no bfloat16
 
 Usage:
   # Local reward sanity-check (no GPU, no model loading):
@@ -262,7 +262,7 @@ print(f"Loading {MODEL_NAME}...")
 bnb_config = BitsAndBytesConfig(
     load_in_4bit=True,
     bnb_4bit_quant_type="nf4",
-    bnb_4bit_compute_dtype=torch.bfloat16,
+    bnb_4bit_compute_dtype=torch.float16,   # P100 has no bfloat16 hardware support
     bnb_4bit_use_double_quant=True,
 )
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, trust_remote_code=True)
@@ -274,12 +274,12 @@ model = AutoModelForCausalLM.from_pretrained(
     quantization_config=bnb_config,
     device_map="auto",
     trust_remote_code=True,
-    torch_dtype=torch.bfloat16,
+    torch_dtype=torch.float16,              # P100 has no bfloat16 hardware support
 )
 model.config.use_cache = False
 
 lora_config = LoraConfig(
-    r=16,
+    r=8,                                    # P100: 16GB VRAM, halved from r=16
     lora_alpha=16,
     target_modules=["q_proj", "k_proj", "v_proj", "o_proj",
                     "gate_proj", "up_proj", "down_proj"],
@@ -380,7 +380,7 @@ def run_baseline(n: int = 20) -> dict:
         prompt = bug_to_prompt(bug)
         inputs = tokenizer(prompt, return_tensors="pt").to(RUNTIME_DEVICE)
         with torch.no_grad():
-            out = model.generate(**inputs, max_new_tokens=400, temperature=0.1, do_sample=False)
+            out = model.generate(**inputs, max_new_tokens=200, temperature=0.1, do_sample=False)
         completion = tokenizer.decode(out[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
         r = reward_fn([completion], [prompt], bug_metadata=[bug])
         rewards.append(r[0])
@@ -407,16 +407,16 @@ def make_dataset(step: int) -> Dataset:
 config = GRPOConfig(
     output_dir=CHECKPOINT_DIR,
     max_steps=MAX_STEPS,
-    per_device_train_batch_size=4,       # A100 80GB handles 4 (was 2)
-    gradient_accumulation_steps=2,       # effective batch = 8 (same total, less accumulation lag)
-    learning_rate=2e-5,                  # slightly higher lr for faster convergence
+    per_device_train_batch_size=1,       # P100 16GB: must be 1
+    gradient_accumulation_steps=8,       # effective batch = 8 (compensates for batch=1)
+    learning_rate=2e-5,
     lr_scheduler_type="cosine",
-    warmup_steps=20 if args.test else 40,
-    num_generations=8,                   # GRPO key: more rollouts = stronger learning signal (was 4)
-    max_completion_length=512,           # longer responses = more complete fixes (was 400)
-    temperature=0.9,                     # slightly higher temp = more diverse rollouts for GRPO
-    logging_steps=5 if args.test else 5, # log every 5 steps for dense W&B curve
-    save_steps=50 if args.test else 100,
+    warmup_steps=10 if args.test else 30,
+    num_generations=4,                   # P100: halved from 8 to fit in 16GB
+    max_completion_length=256,           # P100: halved from 512 to fit in 16GB
+    temperature=0.9,
+    logging_steps=5,
+    save_steps=50 if args.test else 50,
     report_to="wandb" if WANDB_API_KEY else "none",
 )
 
@@ -454,7 +454,7 @@ for bug in bugs:
     prompt = bug_to_prompt(bug)
     inputs = tokenizer(prompt, return_tensors="pt").to(RUNTIME_DEVICE)
     with torch.no_grad():
-        out = model.generate(**inputs, max_new_tokens=400, temperature=0.1, do_sample=False)
+        out = model.generate(**inputs, max_new_tokens=200, temperature=0.1, do_sample=False)
     completion = tokenizer.decode(out[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
     r = reward_fn([completion], [prompt], bug_metadata=[bug])
     post_rewards.append(r[0])
