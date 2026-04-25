@@ -265,10 +265,7 @@ def _run_tests(code: str, function_name: str, test_cases: list) -> dict:
     for tc in test_cases:
         inp = tc["input"]
         expected = tc["expected_output"]
-        if isinstance(inp, (list, tuple)):
-            args_str = ", ".join(repr(x) for x in inp)
-        else:
-            args_str = repr(inp)
+        args_str = ", ".join(repr(x) for x in inp)
         script = (
             f"{code}\n"
             f"try:\n"

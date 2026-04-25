@@ -155,7 +155,7 @@ def _run_fix(proposed_code: str, bug: dict) -> dict:
     passed = 0
     for test in test_cases:
         inp = test["input"]
-        args_str = ", ".join(repr(x) for x in inp) if isinstance(inp, (list, tuple)) else repr(inp)
+        args_str = ", ".join(repr(x) for x in inp)
         script = (
             f"{proposed_code}\n"
             f"try:\n"
