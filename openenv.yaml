@@ -1,21 +1,61 @@
-name: agentdebugger-env
-version: 1.0.0
+name: AgentDebuggerEnv
+version: "1.0.0"
 description: >
-  A live, iterative debugging environment where AI agents fix broken code
-  by forming hypotheses, submitting fixes, observing test output, and
-  iterating — benchmarking genuine agentic reasoning through a
-  hypothesis-test-fix feedback loop.
+  An OpenEnv-compliant RL training environment where LLM agents learn to debug
+  Python code through structured multi-turn hypothesis-driven reasoning.
+  The agent forms hypotheses, tests them, and refines iteratively over up to 5 turns.
+  Trained via GRPO on Qwen2.5-Coder-7B-Instruct with curriculum learning across
+  3 bug difficulty tiers. Reward design follows Masud et al. (2026) execution-based
+  + process-based taxonomy and Ibrahim et al. (2024) potential-based shaping.
 domain: software_engineering
 tags:
+  - openenv
   - debugging
+  - reinforcement-learning
+  - grpo
+  - curriculum-learning
+  - python
+  - code-reasoning
+  - hypothesis-driven
   - agentic-reasoning
   - code-repair
-  - openenv
   - software-engineering
 observation_type: structured
 action_type: structured
 reward_type: dense
 episode_termination: action_or_step_limit
+observation_space:
+  type: object
+  properties:
+    buggy_code:
+      type: string
+      description: The Python function containing the bug
+    error_message:
+      type: string
+      description: Error output or test failure description seen at episode start
+    test_results:
+      type: object
+      description: Results of running current test suite
+    turn_number:
+      type: integer
+      description: Current turn within episode (0-indexed, max 4)
+    history:
+      type: array
+      description: Previous turns with agent outputs and rewards
+action_space:
+  type: object
+  properties:
+    structured_response:
+      type: string
+      description: >
+        Agent response in required format:
+        OBSERVATION: [text]
+        HYPOTHESIS: [text]
+        CONFIDENCE: [low|medium|high]
+        ACTION: [inspect_lines|run_tests|propose_fix|request_context|give_up]
+        DETAIL: [text]
+reward_range: [-0.5, 1.0]
+max_episode_steps: 5
 inference_script: inference.py
 tasks:
   - id: easy
