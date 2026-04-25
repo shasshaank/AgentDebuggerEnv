@@ -37,18 +37,19 @@ parser.add_argument("--max_steps", type=int, default=500)
 args = parser.parse_args()
 
 # ── Install dependencies (for Colab/HF Spaces) ───────────────────────────────
-# If running locally with venv, comment these out
 if os.environ.get("COLAB_RELEASE_TAG") or os.environ.get("SPACE_ID"):
-    os.system("pip install -q unsloth trl wandb datasets")
+    os.system("pip install -q trl wandb datasets bitsandbytes peft transformers accelerate")
 
 # ── GPU/training imports (skipped in --test-local mode) ───────────────────────
 if not args.test_local:
     import torch
     import wandb
     from datasets import Dataset
-    from unsloth import FastLanguageModel
+    from transformers import (
+        AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, TrainerCallback
+    )
+    from peft import get_peft_model, LoraConfig, TaskType
     from trl import GRPOTrainer, GRPOConfig
-    from transformers import TrainerCallback
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from server.reward_calculator import DebugRewardCalculator
@@ -234,23 +235,37 @@ if args.test_local:
 
 # ── Load model ────────────────────────────────────────────────────────────────
 print(f"Loading {MODEL_NAME}...")
-model, tokenizer = FastLanguageModel.from_pretrained(
-    model_name=MODEL_NAME,
-    max_seq_length=4096,
+bnb_config = BitsAndBytesConfig(
     load_in_4bit=True,
-    dtype=None,
+    bnb_4bit_quant_type="nf4",
+    bnb_4bit_compute_dtype=torch.bfloat16,
+    bnb_4bit_use_double_quant=True,
 )
-model = FastLanguageModel.get_peft_model(
-    model,
+tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, trust_remote_code=True)
+tokenizer.pad_token = tokenizer.eos_token
+tokenizer.padding_side = "left"
+
+model = AutoModelForCausalLM.from_pretrained(
+    MODEL_NAME,
+    quantization_config=bnb_config,
+    device_map="auto",
+    trust_remote_code=True,
+    torch_dtype=torch.bfloat16,
+)
+model.config.use_cache = False
+
+lora_config = LoraConfig(
     r=16,
+    lora_alpha=16,
     target_modules=["q_proj", "k_proj", "v_proj", "o_proj",
                     "gate_proj", "up_proj", "down_proj"],
-    lora_alpha=16,
-    lora_dropout=0,
+    lora_dropout=0.0,
     bias="none",
-    use_gradient_checkpointing="unsloth",
-    random_state=42,
+    task_type=TaskType.CAUSAL_LM,
 )
+model = get_peft_model(model, lora_config)
+model.enable_input_require_grads()
+model.gradient_checkpointing_enable()
 print(f"Trainable params: {model.num_parameters(only_trainable=True):,}")
 
 # ── Runtime device selection ──────────────────────────────────────────────────
@@ -333,7 +348,7 @@ def reward_fn(completions: list[str], prompts: list[str], **kwargs) -> list[floa
 # ── Baseline evaluation (run BEFORE training) ─────────────────────────────────
 def run_baseline(n: int = 20) -> dict:
     print("\nRunning baseline evaluation on UNTRAINED model...")
-    FastLanguageModel.for_inference(model)
+    model.eval()
     bugs = load_bugs(1)[:n]
     rewards = []
     solved = 0
@@ -357,7 +372,7 @@ def run_baseline(n: int = 20) -> dict:
     return result
 
 baseline = run_baseline()
-FastLanguageModel.for_training(model)
+model.train()
 
 # ── Build initial dataset ─────────────────────────────────────────────────────
 def make_dataset(step: int) -> Dataset:
@@ -407,7 +422,7 @@ print(f"Baseline solve rate: {baseline['solve_rate']:.1%} — target: >60% after
 trainer.train(resume_from_checkpoint=args.resume)
 
 # ── Post-training evaluation ──────────────────────────────────────────────────
-FastLanguageModel.for_inference(model)
+model.eval()
 bugs = load_bugs(1)[:20]
 post_rewards = []
 post_solved = 0
@@ -439,6 +454,6 @@ model.save_pretrained("./final_model")
 tokenizer.save_pretrained("./final_model")
 HF_TOKEN = os.environ.get("HF_TOKEN")
 if HF_TOKEN and not args.test:
-    model.push_to_hub(HF_REPO, token=HF_TOKEN)
-    tokenizer.push_to_hub(HF_REPO, token=HF_TOKEN)
+    model.push_to_hub(HF_REPO, token=HF_TOKEN, private=True)
+    tokenizer.push_to_hub(HF_REPO, token=HF_TOKEN, private=True)
     print(f"Pushed to https://huggingface.co/{HF_REPO}")
