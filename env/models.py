@@ -5,8 +5,9 @@ Pydantic v2 data models for structured interaction between the agent
 and the environment, ensuring strict type safety and schema compliance.
 """
 
+import re
 from pydantic import BaseModel
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Literal
 
 
 class FixAttempt(BaseModel):
@@ -69,3 +70,65 @@ class Reward(BaseModel):
     cumulative_reward: float      # Sum of all step_rewards this episode
     grader_score: float           # 0.0 during episode. Set ONLY on terminal step (done=True).
     breakdown: Dict[str, float]   # Itemized components
+
+
+# ── STRUCTURED AGENT OUTPUT ────────────────────────────────────────────────
+
+VALID_ACTIONS = {"inspect_lines", "run_tests", "propose_fix", "request_context", "give_up"}
+
+
+class StructuredAgentOutput(BaseModel):
+    observation: str
+    hypothesis: str
+    confidence: Literal["low", "medium", "high"]
+    action: str
+    detail: str
+    valid: bool
+    raw_text: str
+
+
+def parse_agent_output(raw_text: str) -> StructuredAgentOutput:
+    """
+    Parse agent's structured response. Robust to minor formatting variations.
+    Sets valid=False if any required field is missing or action is not in VALID_ACTIONS.
+
+    Expected format:
+        OBSERVATION: [text]
+        HYPOTHESIS: [text]
+        CONFIDENCE: [low|medium|high]
+        ACTION: [inspect_lines|run_tests|propose_fix|request_context|give_up]
+        DETAIL: [text]
+    """
+    def extract_field(text: str, field: str) -> Optional[str]:
+        pattern = rf"(?i){field}\s*:\s*(.*?)(?=\n(?:OBSERVATION|HYPOTHESIS|CONFIDENCE|ACTION|DETAIL)\s*:|$)"
+        match = re.search(pattern, text, re.DOTALL)
+        if match:
+            return match.group(1).strip()
+        return None
+
+    observation = extract_field(raw_text, "OBSERVATION") or ""
+    hypothesis = extract_field(raw_text, "HYPOTHESIS") or ""
+    confidence_raw = (extract_field(raw_text, "CONFIDENCE") or "").lower().strip()
+    action_raw = (extract_field(raw_text, "ACTION") or "").lower().strip()
+    detail = extract_field(raw_text, "DETAIL") or ""
+
+    confidence = confidence_raw if confidence_raw in {"low", "medium", "high"} else "low"
+    action = action_raw if action_raw in VALID_ACTIONS else "invalid"
+
+    valid = all([
+        len(observation) > 5,
+        len(hypothesis) > 10,
+        confidence in {"low", "medium", "high"},
+        action in VALID_ACTIONS,
+        len(detail) > 0,
+    ])
+
+    return StructuredAgentOutput(
+        observation=observation,
+        hypothesis=hypothesis,
+        confidence=confidence,
+        action=action,
+        detail=detail,
+        valid=valid,
+        raw_text=raw_text,
+    )

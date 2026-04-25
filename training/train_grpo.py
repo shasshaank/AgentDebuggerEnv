@@ -1,0 +1,324 @@
+"""
+AgentDebuggerEnv — GRPO Training Script
+Model: Qwen2.5-Coder-7B-Instruct (4-bit quantized via Unsloth)
+Algorithm: GRPO (Group Relative Policy Optimization) via HuggingFace TRL
+GPU: HuggingFace ZeroGPU H200 (free) or paid HF Spaces A10G
+
+Usage:
+  # Test run (no GPU needed, 10 steps):
+  python training/train_grpo.py --test
+
+  # Full training run:
+  python training/train_grpo.py
+
+  # Resume from checkpoint:
+  python training/train_grpo.py --resume ./checkpoints/checkpoint-400
+"""
+
+import os
+import sys
+import json
+import argparse
+import random
+import subprocess
+import tempfile
+import torch
+
+# ── Parse args ────────────────────────────────────────────────────────────────
+parser = argparse.ArgumentParser()
+parser.add_argument("--test", action="store_true", help="Run 10 steps for testing")
+parser.add_argument("--resume", type=str, default=None, help="Path to checkpoint")
+parser.add_argument("--max_steps", type=int, default=1000)
+args = parser.parse_args()
+
+# ── Install dependencies (for Colab/HF Spaces) ───────────────────────────────
+# If running locally with venv, comment these out
+if os.environ.get("COLAB_RELEASE_TAG") or os.environ.get("SPACE_ID"):
+    os.system("pip install -q unsloth trl wandb datasets")
+
+# ── Imports ───────────────────────────────────────────────────────────────────
+import wandb
+from datasets import Dataset
+from unsloth import FastLanguageModel
+from trl import GRPOTrainer, GRPOConfig
+from transformers import TrainerCallback
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from server.reward_calculator import DebugRewardCalculator
+from server.models import parse_agent_output
+
+# ── Configuration ─────────────────────────────────────────────────────────────
+MODEL_NAME = "Qwen/Qwen2.5-Coder-7B-Instruct"
+HF_REPO = "shashaank0707/AgentDebugger-trained"
+MAX_STEPS = 10 if args.test else args.max_steps
+CHECKPOINT_DIR = "./checkpoints"
+
+# W&B — optional but strongly recommended for judging
+WANDB_API_KEY = os.environ.get("WANDB_API_KEY", "")
+if WANDB_API_KEY:
+    wandb.init(
+        project="AgentDebuggerEnv",
+        name=f"grpo-qwen-7b-{'test' if args.test else 'full'}",
+        config={
+            "model": MODEL_NAME,
+            "algorithm": "GRPO",
+            "curriculum": "tier1->tier2->tier3",
+            "max_steps": MAX_STEPS,
+            "reward_components": ["format", "hypothesis", "localization", "fix", "semantic", "efficiency"],
+            "paper_citations": ["Masud et al. 2026", "Ibrahim et al. 2024"],
+        }
+    )
+
+# ── System prompt ─────────────────────────────────────────────────────────────
+SYSTEM_PROMPT = """You are an expert Python debugger. You reason through bugs systematically.
+
+You MUST respond in EXACTLY this format — no exceptions, no extra text:
+
+OBSERVATION: [Specific observations about the code and error. Reference exact line numbers.]
+HYPOTHESIS: [Your theory about the root cause. Must be at least 2 sentences. Reference specific variable names, operators, or logic.]
+CONFIDENCE: [low | medium | high]
+ACTION: [One of: inspect_lines | run_tests | propose_fix | request_context | give_up]
+DETAIL: [For propose_fix: the complete corrected function code. For inspect_lines: line numbers. For others: specific details.]
+
+Rules:
+- Never omit any field
+- HYPOTHESIS must explain WHY the bug causes the observed failure
+- If proposing a fix, DETAIL must contain the complete function, not just the changed line
+- Give up only if you have exhausted all reasonable hypotheses"""
+
+# ── Load bugs ─────────────────────────────────────────────────────────────────
+def load_bugs(tier: int) -> list[dict]:
+    path = f"data/bugs_tier{tier}.jsonl"
+    if not os.path.exists(path):
+        print(f"WARNING: {path} not found. Run data/generate_bugs.py first.")
+        return []
+    with open(path) as f:
+        return [json.loads(line) for line in f if line.strip()]
+
+def get_bugs_for_step(step: int) -> list[dict]:
+    tier1 = load_bugs(1)
+    if step < 300:
+        return tier1
+    elif step < 600:
+        tier2 = load_bugs(2)
+        return tier1 + tier2[:int(len(tier2) * 0.43)]
+    return tier1 + load_bugs(2) + load_bugs(3)
+
+def bug_to_prompt(bug: dict) -> str:
+    return (
+        f"<|im_start|>system\n{SYSTEM_PROMPT}<|im_end|>\n"
+        f"<|im_start|>user\n"
+        f"Debug this Python function:\n\n```python\n{bug['buggy_code']}\n```\n\n"
+        f"Initial failure: {bug.get('initial_error', 'Some tests are failing.')}\n"
+        f"<|im_end|>\n"
+        f"<|im_start|>assistant\n"
+    )
+
+# ── Load model ────────────────────────────────────────────────────────────────
+print(f"Loading {MODEL_NAME}...")
+model, tokenizer = FastLanguageModel.from_pretrained(
+    model_name=MODEL_NAME,
+    max_seq_length=4096,
+    load_in_4bit=True,
+    dtype=None,
+)
+model = FastLanguageModel.get_peft_model(
+    model,
+    r=16,
+    target_modules=["q_proj", "k_proj", "v_proj", "o_proj",
+                    "gate_proj", "up_proj", "down_proj"],
+    lora_alpha=16,
+    lora_dropout=0,
+    bias="none",
+    use_gradient_checkpointing="unsloth",
+    random_state=42,
+)
+print(f"Trainable params: {model.num_parameters(only_trainable=True):,}")
+
+# ── Reward function ───────────────────────────────────────────────────────────
+calculator = DebugRewardCalculator()
+
+def reward_fn(completions: list[str], prompts: list[str], **kwargs) -> list[float]:
+    """
+    GRPO reward function. Called on groups of completions for the same prompt.
+    GRPO learns from RELATIVE differences within each group.
+    """
+    rewards = []
+    bugs = kwargs.get("bug_metadata", [{}] * len(completions))
+
+    for completion, bug in zip(completions, bugs):
+        try:
+            agent_output = parse_agent_output(completion)
+
+            # Run fix if agent proposes one
+            test_results = {"passed": 0, "failed": 0, "total": 0, "newly_broken": 0}
+            if agent_output.action == "propose_fix" and bug:
+                test_results = _run_fix(agent_output.detail, bug)
+
+            breakdown = calculator.compute_turn_reward(
+                agent_output=agent_output,
+                ground_truth={
+                    "bug_function": bug.get("bug_location", {}).get("function", ""),
+                    "bug_line": bug.get("bug_location", {}).get("line_start", -1),
+                    "bug_type": bug.get("bug_type", ""),
+                    "canonical_fix_code": bug.get("original_code", ""),
+                },
+                test_results=test_results,
+                turn_number=0,
+            )
+
+            if WANDB_API_KEY:
+                wandb.log({k: v for k, v in breakdown.__dict__.items()})
+
+            rewards.append(breakdown.total)
+
+        except Exception as e:
+            print(f"Reward error: {e}")
+            rewards.append(-0.3)
+
+    return rewards
+
+def _run_fix(proposed_code: str, bug: dict) -> dict:
+    """Safely run proposed fix with subprocess timeout."""
+    test_cases = bug.get("test_cases", [])
+    func_name = bug.get("function_name", "")
+    if not proposed_code or not test_cases or not func_name:
+        return {"passed": 0, "failed": 0, "total": len(test_cases), "newly_broken": 0}
+
+    passed = 0
+    for test in test_cases:
+        inp = test["input"]
+        args_str = ", ".join(repr(x) for x in inp) if isinstance(inp, (list, tuple)) else repr(inp)
+        script = (
+            f"{proposed_code}\n"
+            f"try:\n"
+            f"    r={func_name}({args_str})\n"
+            f"    print('PASS' if r=={repr(test['expected_output'])} else 'FAIL')\n"
+            f"except Exception as e:\n"
+            f"    print(f'ERROR: {{e}}')\n"
+        )
+        try:
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+                f.write(script)
+                fname = f.name
+            r = subprocess.run(["python", fname], capture_output=True, text=True, timeout=5)
+            os.unlink(fname)
+            if "PASS" in r.stdout:
+                passed += 1
+        except Exception:
+            pass
+
+    return {"passed": passed, "failed": len(test_cases) - passed, "total": len(test_cases), "newly_broken": 0}
+
+# ── Baseline evaluation (run BEFORE training) ─────────────────────────────────
+def run_baseline(n: int = 20) -> dict:
+    print("\nRunning baseline evaluation on UNTRAINED model...")
+    FastLanguageModel.for_inference(model)
+    bugs = load_bugs(1)[:n]
+    rewards = []
+    solved = 0
+    for bug in bugs:
+        prompt = bug_to_prompt(bug)
+        inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
+        with torch.no_grad():
+            out = model.generate(**inputs, max_new_tokens=400, temperature=0.1, do_sample=False)
+        completion = tokenizer.decode(out[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+        r = reward_fn([completion], [prompt], bug_metadata=[bug])
+        rewards.append(r[0])
+        if r[0] > 0.30:
+            solved += 1
+
+    result = {"solve_rate": solved / max(len(bugs), 1), "avg_reward": sum(rewards) / max(len(rewards), 1), "rewards": rewards}
+    with open("baseline_results.json", "w") as f:
+        json.dump(result, f)
+    print(f"Baseline: solve_rate={result['solve_rate']:.1%}, avg_reward={result['avg_reward']:.3f}")
+    if WANDB_API_KEY:
+        wandb.log({"baseline/solve_rate": result["solve_rate"], "baseline/avg_reward": result["avg_reward"]})
+    return result
+
+baseline = run_baseline()
+FastLanguageModel.for_training(model)
+
+# ── Build initial dataset ─────────────────────────────────────────────────────
+def make_dataset(step: int) -> Dataset:
+    bugs = get_bugs_for_step(step)
+    return Dataset.from_list([{"prompt": bug_to_prompt(b), "bug_metadata": b} for b in bugs])
+
+# ── Training config ───────────────────────────────────────────────────────────
+config = GRPOConfig(
+    output_dir=CHECKPOINT_DIR,
+    max_steps=MAX_STEPS,
+    per_device_train_batch_size=2,
+    gradient_accumulation_steps=4,
+    learning_rate=1e-5,
+    lr_scheduler_type="cosine",
+    warmup_steps=20 if args.test else 50,
+    num_generations=4,
+    max_new_tokens=400,
+    temperature=0.8,
+    logging_steps=5 if args.test else 10,
+    save_steps=50 if args.test else 100,
+    report_to="wandb" if WANDB_API_KEY else "none",
+)
+
+trainer = GRPOTrainer(
+    model=model,
+    args=config,
+    train_dataset=make_dataset(0),
+    reward_funcs=reward_fn,
+    tokenizer=tokenizer,
+)
+
+# ── Curriculum callback ───────────────────────────────────────────────────────
+class CurriculumCallback(TrainerCallback):
+    def on_step_end(self, args, state, control, **kwargs):
+        step = state.global_step
+        if step in [300, 600]:
+            trainer.train_dataset = make_dataset(step)
+            print(f"\nCurriculum advanced at step {step}!")
+            if WANDB_API_KEY:
+                wandb.log({"curriculum/step": step})
+
+trainer.add_callback(CurriculumCallback())
+
+# ── Train ─────────────────────────────────────────────────────────────────────
+print(f"\nStarting GRPO training. Max steps: {MAX_STEPS}")
+print(f"Baseline solve rate: {baseline['solve_rate']:.1%} — target: >60% after training")
+trainer.train(resume_from_checkpoint=args.resume)
+
+# ── Post-training evaluation ──────────────────────────────────────────────────
+FastLanguageModel.for_inference(model)
+bugs = load_bugs(1)[:20]
+post_rewards = []
+post_solved = 0
+for bug in bugs:
+    prompt = bug_to_prompt(bug)
+    inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
+    with torch.no_grad():
+        out = model.generate(**inputs, max_new_tokens=400, temperature=0.1, do_sample=False)
+    completion = tokenizer.decode(out[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+    r = reward_fn([completion], [prompt], bug_metadata=[bug])
+    post_rewards.append(r[0])
+    if r[0] > 0.30:
+        post_solved += 1
+
+post_solve_rate = post_solved / max(len(bugs), 1)
+print(f"\n{'='*60}")
+print(f"RESULTS:")
+print(f"Before training: {baseline['solve_rate']:.1%} solve rate")
+print(f"After training:  {post_solve_rate:.1%} solve rate")
+print(f"Improvement:     +{post_solve_rate - baseline['solve_rate']:.1%}")
+print(f"{'='*60}")
+
+if WANDB_API_KEY:
+    wandb.log({"final/solve_rate": post_solve_rate, "final/improvement": post_solve_rate - baseline["solve_rate"]})
+    wandb.finish()
+
+# ── Save and push ─────────────────────────────────────────────────────────────
+model.save_pretrained("./final_model")
+tokenizer.save_pretrained("./final_model")
+HF_TOKEN = os.environ.get("HF_TOKEN")
+if HF_TOKEN and not args.test:
+    model.push_to_hub(HF_REPO, token=HF_TOKEN)
+    tokenizer.push_to_hub(HF_REPO, token=HF_TOKEN)
+    print(f"Pushed to https://huggingface.co/{HF_REPO}")

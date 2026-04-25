@@ -19,12 +19,12 @@ from openai import OpenAI, APIError, RateLimitError, APIConnectionError, APITime
 import requests
 
 # ── Environment variables (never hardcode these) ──────────────────────────────
-API_BASE_URL = os.environ.get("API_BASE_URL", "https://api.openai.com/v1")
-MODEL_NAME   = os.environ.get("MODEL_NAME", "gpt-4o")
-HF_TOKEN     = os.environ.get("HF_TOKEN", "")
+API_BASE_URL = os.environ.get("API_BASE_URL", "https://router.huggingface.co/v1")
+MODEL_NAME   = os.environ.get("MODEL_NAME", "meta-llama/Llama-3.1-70B-Instruct")
+HF_TOKEN     = os.environ.get("HF_TOKEN") or os.environ.get("OPENAI_API_KEY", "")
 ENV_BASE_URL = os.environ.get("ENV_BASE_URL", "http://localhost:8000")
 
-client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
+client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN or "EMPTY")
 
 SYSTEM_PROMPT = """You are an expert software debugger. You will be given broken code and a
 failing test suite. Your job is to:
@@ -171,7 +171,8 @@ def run_episode(task_id: str) -> dict:
     obs = reset_resp.json()
 
     # [START] task=NAME
-    print(f"[START] task={task_id}", flush=True)
+    print(f"\n[START] task={task_id}", flush=True)
+    print(f"  Description: {obs['task_description'][:100]}...", flush=True)
 
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
@@ -215,7 +216,7 @@ def run_episode(task_id: str) -> dict:
         last_result = result
 
         # [STEP] step=N reward=R
-        print(f"[STEP] step={obs['step_number']} reward={reward['step_reward']}", flush=True)
+        print(f"  [STEP {obs['step_number']}] Action: {action.get('action_type')} | Tests: {obs['tests_passed']}/{obs['tests_total']} | Reward: {reward['step_reward']:+.3f}", flush=True)
 
         # Build context for next LLM call
         step_msg = build_step_message(obs, reward, info)

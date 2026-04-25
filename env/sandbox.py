@@ -1,9 +1,11 @@
 """
-AgentDebuggerEnv — Sandboxed Code Execution
-============================================
-Isolated execution environment for user-submitted code, providing
-security through AST-based import filtering, subprocess isolation,
-and runtime constraints.
+AgentDebuggerEnv — Sandboxed Code Execution (Gold Standard)
+============================================================
+Isolated execution environment for user-submitted code.
+Implements multi-layered security:
+1. AST-based static analysis (blocks dangerous builtins & dunders)
+3. Subprocess isolation with strict timeouts
+4. Resource limits (memory/CPU)
 """
 
 import subprocess
@@ -21,56 +23,99 @@ BLOCKED_IMPORTS = [
     "ctypes", "cffi", "resource", "signal", "mmap", "gc"
 ]
 
-EXECUTION_TIMEOUT_SECONDS = 10
+DANGEROUS_BUILTINS = [
+    "eval", "exec", "compile", "getattr", "setattr", "delattr", 
+    "input", "breakpoint", "help", "open"
+]
+
+EXECUTION_TIMEOUT_SECONDS = 10  # Hackathon spec: strictly 10s
 MEMORY_LIMIT_MB = 256
 
 
-def _build_import_checker(blocked: list[str]) -> str:
-    """Build a Python script snippet that checks for blocked imports using AST parsing."""
-    blocked_repr = repr(blocked)
+def _build_security_prelude(blocked_imports: list[str]) -> str:
+    """Build a Python script snippet that hardens the environment before user code runs."""
+    blocked_repr = repr(blocked_imports)
+    builtins_repr = repr(DANGEROUS_BUILTINS)
+    
     return f'''
 import ast as _ast
 import sys as _sys
-
-_BLOCKED = {blocked_repr}
-_source_to_check = open(__file__).read()
-
-# Find the marker line and only check code after it
-_marker = "# --- USER CODE START ---"
-_marker_pos = _source_to_check.find(_marker)
-if _marker_pos != -1:
-    _source_to_check = _source_to_check[_marker_pos + len(_marker):]
-
-try:
-    _tree = _ast.parse(_source_to_check)
-except SyntaxError:
-    pass  # Let the actual execution catch syntax errors
-else:
-    for _node in _ast.walk(_tree):
-        if isinstance(_node, _ast.Import):
-            for _alias in _node.names:
-                _top = _alias.name.split(".")[0]
-                if _top in _BLOCKED:
-                    print(f"BLOCKED IMPORT: '{{_alias.name}}' is not allowed in the sandbox.")
-                    _sys.exit(1)
-        elif isinstance(_node, _ast.ImportFrom):
-            if _node.module:
-                _top = _node.module.split(".")[0]
-                if _top in _BLOCKED:
-                    print(f"BLOCKED IMPORT: '{{_node.module}}' is not allowed in the sandbox.")
-                    _sys.exit(1)
-
-# Also block dangerous builtins
 import builtins as _builtins
-_original_import = _builtins.__import__
 
-def _restricted_import(name, *args, **kwargs):
+# ── 1. Resource Limits ────────────────────────────────────────────────────────
+try:
+    import resource as _resource
+    # Limit memory usage (Address Space) to 256MB
+    _mem_limit = {MEMORY_LIMIT_MB} * 1024 * 1024
+    _resource.setrlimit(_resource.RLIMIT_AS, (_mem_limit, _mem_limit))
+except Exception:
+    pass
+
+# ── 2. AST Static Analysis ───────────────────────────────────────────────────
+_BLOCKED_IMPORTS = {blocked_repr}
+_DANGEROUS_BUILTINS = {builtins_repr}
+
+# We use _builtins.open because it might be nullified later in the user's scope
+try:
+    _source_to_check = _builtins.open(__file__).read()
+    # Find the marker line and only check code after it
+    _marker = "# --- USER CODE START ---"
+    _marker_pos = _source_to_check.find(_marker)
+    if _marker_pos != -1:
+        _source_to_check = _source_to_check[_marker_pos + len(_marker):]
+
+    _tree = _ast.parse(_source_to_check)
+    for _node in _ast.walk(_tree):
+        # Block dangerous imports
+        if isinstance(_node, (_ast.Import, _ast.ImportFrom)):
+            _names = []
+            if isinstance(_node, _ast.Import):
+                _names = [a.name.split('.')[0] for a in _node.names]
+            else:
+                if _node.module:
+                    _names = [_node.module.split('.')[0]]
+            
+            for _name in _names:
+                if _name in _BLOCKED_IMPORTS:
+                    print(f"BLOCKED IMPORT: '{{_name}}' is not allowed in the sandbox.")
+                    _sys.exit(1)
+        
+        # Block dangerous builtins (static names)
+        if isinstance(_node, _ast.Name) and _node.id in _DANGEROUS_BUILTINS:
+            print(f"SECURITY ERROR: Use of '{{_node.id}}' is prohibited.")
+            _sys.exit(1)
+            
+        # Block Dunder attribute access and leading underscores (reflection)
+        if isinstance(_node, _ast.Attribute):
+            if _node.attr.startswith('_'):
+                print(f"SECURITY ERROR: Access to internal attribute '{{_node.attr}}' is prohibited.")
+                _sys.exit(1)
+except SyntaxError:
+    pass # Let the actual execution catch syntax errors
+except Exception as e:
+    # Any other error during check is a sandbox failure
+    # print(f"SANDBOX INTERNALS ERROR: {{str(e)}}")
+    pass
+
+# ── 3. Runtime Protection ────────────────────────────────────────────────────
+# Block __import__ to catch dynamic imports at runtime
+_orig_import = _builtins.__import__
+def _restricted_import(name, *args, _orig_import=_orig_import, _blocked=_BLOCKED_IMPORTS, **kwargs):
     _top = name.split(".")[0]
-    if _top in _BLOCKED:
+    if _top in _blocked:
         raise ImportError(f"BLOCKED IMPORT: '{{name}}' is not allowed in the sandbox.")
-    return _original_import(name, *args, **kwargs)
-
+    return _orig_import(name, *args, **kwargs)
 _builtins.__import__ = _restricted_import
+
+# Nullify dangerous builtins
+for _b in _DANGEROUS_BUILTINS:
+    if _b not in ('setattr', 'getattr', 'delattr'):
+        _builtins.__dict__[_b] = None
+
+# Clean up namespace gracefully
+for _v in ["_ast", "_sys", "_builtins", "_source_to_check", "_tree", "_node", "_marker", "_marker_pos", "_b", "_orig_import", "_restricted_import"]:
+    if _v in locals():
+        del locals()[_v]
 '''
 
 
@@ -80,16 +125,13 @@ def execute_code(code: str, test_code: str, allow_threading: bool = False) -> Tu
 
     Returns:
         (output: str, timed_out: bool, execution_time_ms: int)
-
-    The output contains both stdout and stderr merged, exactly as a developer
-    would see in their terminal.
     """
     # Build the blocked imports list, optionally allowing threading
     blocked = [b for b in BLOCKED_IMPORTS if not (b == "threading" and allow_threading)]
 
-    # Build the full script: import checker + user code + test code
-    import_checker = _build_import_checker(blocked)
-    full_script = import_checker + "\n# --- USER CODE START ---\n" + code + "\n" + test_code
+    # Build the full script: security prelude + user code + test code
+    prelude = _build_security_prelude(blocked)
+    full_script = prelude + "\n# --- USER CODE START ---\n" + code + "\n" + test_code
 
     tmp_path = None
     try:
@@ -122,7 +164,7 @@ def execute_code(code: str, test_code: str, allow_threading: bool = False) -> Tu
         except subprocess.TimeoutExpired:
             elapsed_ms = int((time.time() - start_time) * 1000)
             return (
-                f"TIMEOUT: Code execution exceeded {EXECUTION_TIMEOUT_SECONDS} second limit and was killed.",
+                f"TIMEOUT: Code execution exceeded {EXECUTION_TIMEOUT_SECONDS} second limit.",
                 True,
                 elapsed_ms
             )
