@@ -97,10 +97,14 @@ Training **Qwen2.5-Coder-7B-Instruct** on structured hypothesis-driven debugging
         max_lines=50,
         interactive=False,
     )
-    refresh_btn = gr.Button("Refresh Status")
+    refresh_btn = gr.Button("🔄 Refresh Status")
     refresh_btn.click(fn=check_status, outputs=status_box)
 
-    # Auto-refresh every 30s
-    demo.load(fn=check_status, outputs=status_box, every=30)
+    # Load initial status on page load
+    demo.load(fn=check_status, outputs=status_box)
+
+    # Auto-refresh timer (Gradio 4.x syntax)
+    timer = gr.Timer(value=30)
+    timer.tick(fn=check_status, outputs=status_box)
 
 demo.launch(server_name="0.0.0.0", server_port=7860)
