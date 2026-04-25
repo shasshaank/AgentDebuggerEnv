@@ -1,315 +1,213 @@
+---
+title: AgentDebugger-Env 🐛
+emoji: 🐛
+colorFrom: red
+colorTo: yellow
+sdk: docker
+app_port: 8000
+pinned: true
+license: mit
+---
+
 # AgentDebuggerEnv 🐛
 
-> **A live, iterative debugging environment for benchmarking agentic reasoning in AI systems.**
-> Submitted to the **Meta + PyTorch + HuggingFace OpenEnv Hackathon**.
+> **A live, iterative debugging environment for benchmarking genuine agentic reasoning in AI systems.**
 
-[![HuggingFace Space](https://img.shields.io/badge/🤗%20HuggingFace-Space%20Live-yellow)](https://huggingface.co/spaces/shashaank0707/AgentDebugger-env)
-[![OpenEnv Compliant](https://img.shields.io/badge/OpenEnv-Compliant-blue)](https://huggingface.co/spaces/shashaank0707/AgentDebugger-env)
+[![HuggingFace Space](https://img.shields.io/badge/🤗%20Space-Live-yellow)](https://huggingface.co/spaces/shashaank0707/AgentDebugger-env)
+[![OpenEnv](https://img.shields.io/badge/OpenEnv-Compliant-blue)](#openenv-api-compliance)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.110-009688)](https://fastapi.tiangolo.com/)
+
+*Submitted to the **Meta + PyTorch + HuggingFace OpenEnv Hackathon.***
 
 ---
 
 ## The Problem with Existing Code Benchmarks
 
-Benchmarks like HumanEval, MBPP, and even SWE-bench share a fundamental limitation: they are **one-shot evaluations**. A model reads a prompt, generates code, and is scored on whether the output is correct. This measures code generation ability — not debugging ability.
+Benchmarks like HumanEval, MBPP, and SWE-bench share a fundamental limitation: they are **one-shot**. A model reads a problem, generates code, and is scored on the final output. This measures code generation — not debugging ability.
 
-Real software engineering is not one-shot. It is **iterative**. A developer:
+Real software engineering is not one-shot. It is **iterative**. A developer reads failing tests, forms a hypothesis, submits a fix, reads the new error output, updates their theory, and repeats. No existing OpenEnv environment benchmarks this loop.
 
-1. Reads failing tests and error output
-2. Forms a hypothesis about the root cause
-3. Submits a fix
-4. Reads the new error output
-5. Updates their hypothesis
-6. Repeats — sometimes many times
-
-No existing benchmark measures this loop. **AgentDebuggerEnv does.**
+**AgentDebuggerEnv does.**
 
 ---
 
-## What Makes This Different from SWE-bench
-
-SWE-bench gives an agent a static GitHub issue and measures only the final patch correctness. AgentDebuggerEnv is fundamentally different in three ways:
+## How It's Different from SWE-bench
 
 | Dimension | SWE-bench | AgentDebuggerEnv |
 |---|---|---|
-| Evaluation target | Final patch quality | Full reasoning trajectory |
-| Feedback | None — single shot | Real `stdout/stderr` after every fix attempt |
-| Reward signal | Binary (pass/fail) | Dense — every step is scored |
+| Evaluation target | Final patch correctness | Full reasoning trajectory |
+| Feedback to agent | None — single shot | Real `stdout/stderr` after every attempt |
+| Reward signal | Binary end-of-episode | Dense — every step scored |
 | What's measured | Code generation | Hypothesis formation + iterative reasoning |
-| Hard task | Applies existing patch | Must design a test to surface a hidden bug |
+| Hard task | Apply patch to existing issue | Must design a test to surface a hidden bug |
+| Agent failure modes | Not tracked | 4 distinct measurable failure modes |
 
-The iterative feedback loop is the core mechanic. Every `step()` call executes the agent's submitted code in a live sandbox, returns the actual test output, and the agent must update its theory and try again — exactly like a real developer at a terminal.
-
----
-
-## Environment Overview
-
-AgentDebuggerEnv is a fully OpenEnv-compliant environment exposing the standard three-method API:
-
-```
-reset(task_id)  →  initial Observation
-step(action)    →  Observation, Reward, done, info
-state()         →  current internal state dict
-```
-
-The environment is deployed as a containerized FastAPI server on HuggingFace Spaces, passes `openenv validate`, and includes a fully reproducible baseline inference script.
-
-**Live Space:** https://huggingface.co/spaces/shashaank0707/AgentDebugger-env
+The iterative feedback loop is the core mechanic. Every `step()` call executes the agent's code in a live sandbox and returns actual test output. The agent must update its theory and try again — exactly like a real developer at a terminal.
 
 ---
 
-## Project Structure
+## Baseline Performance
 
-```
-AgentDebuggerEnv/
-├── inference.py                  # Baseline inference script (root — hackathon requirement)
-├── env/
-│   ├── environment.py            # Core OpenEnv class: reset(), step(), state()
-│   ├── models.py                 # Pydantic v2 Observation, Action, Reward models
-│   ├── sandbox.py                # AST-based sandboxed code execution
-│   ├── server.py                 # FastAPI server: /reset, /step, /state, /health, /tasks
-│   ├── tasks/
-│   │   ├── registry.py           # Task registry
-│   │   ├── task_easy.py          # Off-by-one bug in binary search
-│   │   ├── task_medium.py        # Red herring authentication bug
-│   │   └── task_hard.py          # Concurrency race condition
-│   └── graders/
-│       ├── base_grader.py        # Abstract base grader
-│       ├── grader_easy.py        # Standard test-pass + efficiency scoring
-│       ├── grader_medium.py      # Red herring detection + score floor fix
-│       └── grader_hard.py        # Sequential + concurrent stress test scoring
-├── server/
-│   └── app.py                    # Entry point alias for openenv validate
-├── tests/
-│   ├── test_environment.py
-│   ├── test_sandbox.py
-│   └── test_graders.py
-├── openenv.yaml                  # OpenEnv spec metadata
-├── Dockerfile
-├── requirements.txt
-├── pyproject.toml
-├── uv.lock                       # Reproducible dependency resolution
-└── .gitignore
-```
+Evaluated using `gpt-4o` with zero-shot prompting. Each task run 5 times independently, scores averaged.
+
+| Task | Difficulty | Mean Score | Std Dev | Solved % | Avg Attempts |
+|---|---|---|---|---|---|
+| Off-by-One Bug | 🟢 Easy | 0.85 | ±0.04 | 100% | 1.8 |
+| Red Herring Auth Bug | 🟡 Medium | 0.50 | ±0.10 | 60% | 4.2 |
+| Race Condition | 🔴 Hard | 0.18 | ±0.09 | 20% | 8.7 |
+| **Overall Mean** | | **0.51** | | **60%** | |
+
+The hard task is specifically designed so that frontier models fail most of the time. GPT-4o almost never spontaneously recognizes that a race condition can exist when all sequential tests pass — which is exactly the reasoning gap this environment is built to measure.
 
 ---
 
-## Data Models
+All four failure modes produce distinct, interpretable score components in the `breakdown` field of every `Reward` response:
 
-### Observation
+*   **Red Herring Susceptibility**: Does the agent overtrust error messages (Medium Task symptom) or trace data flow to the root?
+*   **Stagnation**: Does the agent repeat failed fixes? Prohibited by the `-0.05` stagnation penalty.
+*   **Exploration/Exploitation**: Measures if agents query for context productively before attempting fixes.
+*   **Test-Suite Overconfidence**: Detects if an agent fails to reason about concurrency when sequential tests pass (Hard Task).
 
-Everything the agent sees at each step. Designed to give the agent exactly what a developer sees when debugging — no more, no less.
+---
+
+## Task Suite
+
+### 🟢 Task 1 — Easy: Off-by-One Bug
+
+**Max attempts:** 5 | **Max steps:** 8 | **Tests:** 8
+
+A binary search implementation with a single-character bug: the while loop uses `left < right` instead of `left <= right`. This causes the function to miss the target when it is the last element. The failing test produces a high-signal error message pointing directly at the problem.
+
+**Why it's easy:** The error message names the failing assertion with expected vs actual values. Reading the while condition reveals the bug. 1–2 iterations expected.
+
+**What the grader checks:** Did all 8 tests pass? Did the hypothesis mention the termination condition or off-by-one logic? Was it efficient?
+
+---
+
+### 🟡 Task 2 — Medium: Red Herring Authentication Bug
+
+**Max attempts:** 7 | **Max steps:** 15 | **Tests:** 10 (6 pass, 4 fail on buggy code)
+
+An authentication module with three interdependent functions: `hash_password`, `validate_password`, and `authenticate_user`. All 4 failing tests report that `authenticate_user` returns `False` when it should return `True`. But `authenticate_user` is completely correct. So is `validate_password`. The bug is in `hash_password`, which wraps the MD5 hex digest in `str(bytes(...))` — producing a `"b'...'"` prefix that makes the computed hash never match the stored hash.
+
+**The red herring:** Every surface reading of the error points to `authenticate_user`. The agent must trace data flow backwards through `validate_password` to find the actual corruption in `hash_password`.
+
+**Red herring detection in grader:** A hypothesis mentioning only `authenticate_user` scores 0.0 for hypothesis accuracy. Correctly identifying `hash_password` with supporting detail scores 1.0. GPT-4o follows the red herring ~40% of the time.
+
+---
+
+### 🔴 Task 3 — Hard: Concurrency Race Condition
+
+**Max attempts:** 10 | **Max steps:** 25 | **Tests:** 8 (ALL 8 pass on the buggy code)
+
+A `ConnectionCounter` class used in a web server to track active connections. It uses `threading.Lock` and appears correctly implemented. All 8 sequential unit tests pass. The bug is a TOCTOU race condition: `increment()` and `decrement()` split the read-modify-write cycle across two separate lock acquisitions, leaving a window between read and write where another thread can interleave.
 
 ```python
-class FixAttempt(BaseModel):
-    attempt_number: int       # 1-indexed
-    code_submitted: str       # Full code the agent submitted
-    hypothesis: str           # Agent's stated theory before this attempt
-    execution_output: str     # Full stdout + stderr from sandbox
-    tests_passed: int
-    tests_total: int
-    execution_time_ms: int
-    timed_out: bool
-
-class Observation(BaseModel):
-    # Fixed for the episode
-    task_id: str              # "easy" | "medium" | "hard"
-    task_description: str
-    buggy_code: str           # Original broken code — always visible
-    test_suite: str           # Full test file — agent can read requirements
-    initial_error_output: str # Sandbox output on the buggy code at reset()
-
-    # Changes each step
-    current_code: str         # Most recent submitted code
-    current_error_output: str # Test output on current_code
-    tests_passed: int
-    tests_total: int
-    previous_attempts: List[FixAttempt]  # Full episode history
-
-    # Budget tracking
-    attempts_remaining: int
-    max_attempts: int
-    step_number: int
-    max_steps: int
-    done: bool
-    score_estimate: float     # Running grader estimate shown to agent
-    hint_used: bool
+def increment(self):
+    with self._lock:
+        current = self.count   # read  — lock released here
+    new_val = current + 1      # modify — NO lock held
+    with self._lock:
+        self.count = new_val   # write — race window
 ```
 
-### Action
+The agent must: recognize that 8/8 passing tests do not prove correctness for concurrent code, reason about thread interleaving, design a concurrent stress test that surfaces the race, fix the atomicity issue by collapsing read-modify-write into a single lock scope, and verify the fix survives a 1000-thread stress test.
 
-The agent submits exactly one action per step. Three types:
-
-```python
-class Action(BaseModel):
-    action_type: str          # "submit_fix" | "query_context" | "give_up"
-
-    # submit_fix — primary action
-    fixed_code: Optional[str] = None      # Complete corrected code file
-    hypothesis: Optional[str] = None      # REQUIRED — missing costs -0.10 reward
-
-    # query_context — request more information (first is free)
-    query_type: Optional[str] = None      # "function_signature" | "related_code"
-                                          # | "error_explanation" | "test_details"
-    query_target: Optional[str] = None
-
-    # give_up — explicit surrender, ends episode cleanly
-    final_diagnosis: Optional[str] = None
-```
-
-### Reward
-
-Dense signal at every step — not just binary end-of-episode.
-
-```python
-class Reward(BaseModel):
-    step_reward: float        # This step: -1.0 to +1.0
-    cumulative_reward: float  # Episode total so far
-    grader_score: float       # 0.0 during episode; official score on terminal step
-    breakdown: Dict[str, float]  # Itemized components for interpretability
-```
+**Hard task grader breakdown:**
+- Sequential tests pass (agent submissions only): **0.40**
+- 1000-thread concurrent stress test passes (run 5×, must pass >=4 for full credit): **0.30**
+- Hypothesis accuracy (mentions "race condition", "atomic", "lock"): **0.20**
+- Efficiency bonus (fixed within 5 attempts): **0.10**
 
 ---
 
-## Reward Function
+## Reward Function Design
 
-The reward function is designed so an RL agent receives meaningful signal at every step, not just when tests pass.
+The reward function provides dense signal at every step so an RL agent can learn from every action — not just the final outcome.
 
 ### Step-Level Rewards
 
 | Event | Reward | Reasoning |
 |---|---|---|
-| Fix increases tests passing | `+0.15 × (Δpassed / total)` | Scaled progress reward |
+| Fix increases tests passing | `+0.15 × (Δpassed / total)` | Scaled progress |
 | Fix decreases tests passing | `-0.10 × (Δfailed / total)` | Regression penalty |
-| Fix makes no change | `-0.05` | Stagnation penalty — discourages repetition |
-| All tests pass | `+0.50` | Major bonus on top of progress reward |
-| Sandbox timeout in submitted code | `-0.10` | Penalizes infinite loops |
-| `submit_fix` without hypothesis | `-0.10` | Hypothesis is required |
-| Repeated `query_context` calls | `-0.05` each after first | Diminishing returns on hints |
+| Fix makes no change to passing count | `-0.05` | Stagnation penalty |
+| All tests pass | `+0.50` | Major bonus on top of progress |
+| Submitted code times out in sandbox | `-0.10` | Penalizes infinite loops |
+| `submit_fix` without hypothesis field | `-0.10` | Hypothesis is required |
+| First `query_context` use | `0.00` | Free |
+| Subsequent `query_context` uses | `-0.05` each | Diminishing returns |
 | Episode truncated at max_steps | `-0.20` | Penalizes indecision |
 
-### Episode-Level Grader Score (0.0 → 1.0)
+### Episode-Level Grader Score
 
 ```
-grader_score = test_pass_ratio × 0.60
-             + efficiency_bonus × 0.20
+grader_score = test_pass_ratio    × 0.60
+             + efficiency_bonus   × 0.20
              + hypothesis_accuracy × 0.15
-             + early_solve_bonus × 0.05
+             + early_solve_bonus  × 0.05
 
-where:
-  test_pass_ratio    = agent_best_tests_passed / tests_total
-                       (from agent submissions only — not initial buggy code)
-  efficiency_bonus   = max(0, (max_attempts - attempts_used) / max_attempts)
-  hypothesis_accuracy = fraction of hypotheses correctly identifying bug location
-  early_solve_bonus  = 0.05 if all tests pass within ceil(max_attempts / 3) attempts
+test_pass_ratio    = agent_best_tests_passed / tests_total
+                     (from agent submissions only — never the initial buggy code run)
+efficiency_bonus   = max(0, (max_attempts - attempts_used) / max_attempts)
+hypothesis_accuracy = fraction of hypotheses correctly identifying the bug
+early_solve_bonus  = 0.05 if solved within ceil(max_attempts / 3) attempts
 ```
 
-**Score floor design:** `test_pass_ratio` is calculated only from the agent's submitted attempts — never from the initial buggy code run. This guarantees that a dummy agent that submits nothing scores 0.0, not an inflated baseline.
-
----
-
-## Tasks
-
-### Task 1 — Easy: Off-by-One Bug
-
-**Difficulty:** 🟢 Easy | **Max attempts:** 5 | **Max steps:** 8 | **Tests:** 8
-
-A binary search implementation with a single-character bug: the while loop uses `left < right` instead of `left <= right`. This causes the function to miss the target when it is the last element in the array. The failing test produces a high-signal error message directly indicating the problem.
-
-**Why it's easy:** The error message names the failing assertion. Reading the while condition reveals the bug. One to two iterations expected for any competent agent.
-
-**What the grader checks:** Did the agent fix all 8 tests? Did the hypothesis mention the termination condition or off-by-one logic? Was it solved efficiently?
-
-**Expected GPT-4o baseline:** ~0.85
-
----
-
-### Task 2 — Medium: Red Herring Authentication Bug
-
-**Difficulty:** 🟡 Medium | **Max attempts:** 7 | **Max steps:** 15 | **Tests:** 10 (6 pass, 4 fail on buggy code)
-
-An authentication module with three interdependent functions: `hash_password`, `validate_password`, and `authenticate_user`. The failing tests all report errors on `authenticate_user` returning `False` when it should return `True`. However, `authenticate_user` is completely correct. So is `validate_password`. The actual bug is in `hash_password`, which wraps the MD5 hex digest in `str(bytes(...))` — producing a `"b'...'"` prefix that corrupts the hash string.
-
-The red herring: the error message names `authenticate_user`. Every surface-level reading of the error points to the wrong function. The agent must trace the data flow backwards from the symptom through `validate_password` to find that `hash_password` produces a different format than what the test database expects.
-
-**Why it's medium:** The agent must resist following the error message and instead reason about data flow between functions. GPT-4o follows this red herring approximately 40% of the time.
-
-**Red herring detection in grader:** A hypothesis that mentions only `authenticate_user` scores 0.0 for hypothesis accuracy. A hypothesis that correctly identifies `hash_password` with supporting detail scores 1.0.
-
-**Expected GPT-4o baseline:** ~0.50
-
----
-
-### Task 3 — Hard: Concurrency Race Condition
-
-**Difficulty:** 🔴 Hard | **Max attempts:** 10 | **Max steps:** 25 | **Tests:** 8 (all 8 pass on buggy code)
-
-A `ConnectionCounter` class used in a web server to track active connections. It uses `threading.Lock` and appears to be correctly implemented. All 8 sequential unit tests pass. The bug is a classic TOCTOU (time-of-check to time-of-use) race condition: `increment()` and `decrement()` split the read-modify-write cycle across two separate lock acquisitions, leaving a window between the read and write where another thread can interleave.
-
-```python
-def increment(self):
-    with self._lock:
-        current = self.count     # read  — lock released here
-    new_val = current + 1        # modify — no lock held
-    with self._lock:
-        self.count = new_val     # write — race window exploited
-```
-
-The agent must: (1) recognize that 8/8 passing tests do not prove correctness for concurrent code, (2) reason about thread interleaving, (3) design a concurrent stress test that surfaces the race, (4) fix the atomicity issue by collapsing read-modify-write into a single lock scope, and (5) verify the fix passes both the original tests and a 1000-thread concurrent stress test.
-
-**Why it's hard:** Race conditions are non-deterministic. The bug does not manifest in sequential execution. The agent must demonstrate meta-reasoning about the limits of the existing test suite — a capability current frontier models lack most of the time.
-
-**Hard task grader breakdown:**
-- Sequential tests pass: 0.40 (agent submissions only)
-- 1000-thread concurrent stress test passes: 0.30 (run 3× — must pass all 3 for full credit)
-- Hypothesis accuracy (mentions "race condition", "atomic", "lock"): 0.20
-- Efficiency bonus (fixed within 5 attempts): 0.10
-
-**Expected GPT-4o baseline:** ~0.18
+**Score floor design:** `test_pass_ratio` uses only the agent's submitted attempts — never the initial buggy code run. The medium buggy code passes 6/10 tests and the hard buggy code passes 8/8 tests sequentially. Without this design, a dummy agent that submits nothing would score 0.36 and 0.40 for free respectively. The grader recalculates from the `attempts` list to guarantee the score floor is 0.0.
 
 ---
 
 ## Security Sandbox
 
-Every `submit_fix` action executes agent-generated Python code. The sandbox is the most security-critical component and is implemented in `env/sandbox.py`.
+Every `submit_fix` action executes agent-generated Python code. All execution routes through `env/sandbox.py` — never via raw `exec()` anywhere in the codebase.
 
-### Multi-Layer Protection
+**Layer 1 — AST Import & Attribute Filtering:** Before execution, an AST walk detects blocked imports and prevents access to any attribute starting with an underscore (`_`). This blocks private member access and dunder escapes (like `__class__`).
 
-**Layer 1 — AST Import Filtering:** Before any code runs, an AST pass walks the submitted code and detects blocked imports. Any import of `os`, `sys`, `subprocess`, `socket`, `importlib`, `shutil`, `pathlib`, `glob`, `pickle`, `ctypes`, `multiprocessing`, and others causes immediate rejection with a clear error message. This uses `ast.parse()` + `ast.walk()` — not string matching, which can be bypassed.
+**Layer 2 — Subprocess Isolation:** Code runs in a child subprocess with a stripped environment and no network access.
 
-**Layer 2 — Subprocess Isolation:** Code runs in a separate subprocess, not in the server process. The subprocess has a stripped environment (no `PATH` beyond `/usr/bin`, no sensitive variables). Even if the AST filter is somehow bypassed, the subprocess cannot affect the server.
+**Layer 3 — Hard Timeout:** Every execution killed after 10 seconds. Infinite loops in submitted code return `timed_out: True` and a `-0.10` step reward.
 
-**Layer 3 — Hard Timeout:** Every execution is killed after 10 seconds via `subprocess.run(timeout=10)`. Infinite loops in submitted code return `timed_out: True` and a `-0.10` step reward.
+**Layer 4 — Memory Limit:** 256MB per execution.
 
-**Layer 4 — Memory Limit:** 256MB per execution via environment isolation.
-
-**Threading exception:** The hard task requires `threading` to create the race condition and to verify the fix. The sandbox accepts a `allow_threading=True` flag that removes `threading` from the blocked list for that task only. All other tasks have threading blocked.
+**Threading exception:** The hard task requires `threading` to create and verify the race condition. The sandbox accepts `allow_threading=True` for that task only. All other tasks block threading entirely.
 
 ---
 
-## API Endpoints
+## Data Models
 
-The environment is served as a FastAPI application on port 8000.
+```python
+class Observation(BaseModel):
+    task_id: str                          # "easy" | "medium" | "hard"
+    buggy_code: str                       # Original broken code
+    test_suite: str                       # Full test file content
+    current_code: str                     # Most recent submitted code
+    current_error_output: str             # Sandbox stdout/stderr output
+    tests_passed: int                
+    attempts_remaining: int
+    max_attempts: int
+    done: bool
+    score_estimate: float                 # Running grader estimate
 
-| Endpoint | Method | Description |
-|---|---|---|
-| `/` | GET | API overview — lists all endpoints and tasks |
-| `/health` | GET | Health check — always returns HTTP 200 |
-| `/tasks` | GET | List all tasks with full metadata |
-| `/reset` | POST | Start a new episode. Body: `{"task_id": "easy"}` |
-| `/step` | POST | Submit one action. Body: Action JSON |
-| `/state` | GET | Full internal episode state |
+class Action(BaseModel):
+    action_type: str                      # "submit_fix" | "query_context" | "give_up"
+    fixed_code: Optional[str]             # Complete corrected code
+    hypothesis: Optional[str]             # Theory about the bug (required for submit)
+    query_type: Optional[str]             # "function_signature" | "error_explanation" etc.
 
-All endpoints return HTTP 200 always — errors appear in the response body under `info["error"]`, never as HTTP 4xx/5xx. This ensures the hackathon's automated evaluation never sees a failed HTTP response.
+class Reward(BaseModel):
+    step_reward: float                    # Dense signal: range -1.0 to +1.0
+    cumulative_reward: float 
+    grader_score: float                   # Official score (terminal step only)
+    breakdown: Dict[str, float]           # Itemized components
+```
 
 ---
 
-## OpenEnv Compliance
+## OpenEnv API Compliance
 
 ```yaml
-# openenv.yaml
 name: agentdebugger-env
 version: 1.0.0
 domain: software_engineering
@@ -318,52 +216,51 @@ action_type: structured
 reward_type: dense
 episode_termination: action_or_step_limit
 tasks:
-  - id: easy   | difficulty: easy   | max_steps: 8  | max_attempts: 5
-  - id: medium | difficulty: medium | max_steps: 15 | max_attempts: 7
-  - id: hard   | difficulty: hard   | max_steps: 25 | max_attempts: 10
+  - {id: easy,   difficulty: easy,   max_steps: 8,  max_attempts: 5}
+  - {id: medium, difficulty: medium, max_steps: 15, max_attempts: 7}
+  - {id: hard,   difficulty: hard,   max_steps: 25, max_attempts: 10}
 ```
 
-Validation output:
-```
-✓ openenv.yaml valid
-✓ GET /health → 200
-✓ POST /reset → valid Observation
-✓ POST /step  → (Observation, Reward, bool, dict)
-✓ GET /state  → dict
-✓ 3 tasks registered: easy, medium, hard
-✓ grader_easy:   score in [0.0, 1.0] — PASS
-✓ grader_medium: score in [0.0, 1.0] — PASS
-✓ grader_hard:   score in [0.0, 1.0] — PASS
-✓ inference.py present in root directory
-openenv validate: PASSED
-```
+Application-level errors are returned in `info.error` inside the response body. Core evaluation endpoints are designed to avoid 4xx/5xx status codes for agent-level mistakes, ensuring the evaluation flow is never interrupted by network-level exceptions.
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/` | GET | API overview — lists all endpoints and tasks |
+| `/health` | GET | Health check — always HTTP 200 |
+| `/tasks` | GET | All tasks with metadata |
+| `/reset` | POST | Start episode. Body: `{"task_id": "easy"}` |
+| `/step` | POST | Submit one action |
+| `/state` | GET | Full internal episode state |
 
 ---
 
-## Baseline Results
+## Installation & Usage
 
-Evaluated using `gpt-4o` with zero-shot chain-of-thought prompting. Each task run 5 times independently, scores averaged.
+### Local Setup
 
-| Task | Difficulty | Mean Score | Std Dev | Solved % | Avg Attempts | Avg Steps |
-|---|---|---|---|---|---|---|
-| Off-by-One Bug | Easy | 0.85 | ±0.04 | 100% | 1.8 | 4.2 |
-| Red Herring Auth | Medium | 0.50 | ±0.10 | 60% | 4.2 | 10.6 |
-| Race Condition | Hard | 0.18 | ±0.09 | 20% | 8.7 | 22.1 |
-| **Overall Mean** | | **0.51** | | **60%** | | |
+```bash
+git clone https://github.com/shasshaank/AgentDebuggerEnv
+cd AgentDebuggerEnv
+pip install -r requirements.txt
 
-**Key observations:**
+# Start the environment server
+uvicorn env.server:app --reload --port 8000
 
-**Easy task:** GPT-4o reads the error message, identifies the off-by-one in the while condition on the first or second attempt, and fixes correctly. Failure mode: occasionally misclassifies severity or adds unnecessary changes.
+# Verification: Run the pre-submission validator
+python validator.py
 
-**Medium task:** In ~40% of runs, GPT-4o follows the red herring and spends 2–3 attempts trying to fix `authenticate_user` before eventually tracing back to `hash_password`. When it identifies the correct function immediately, it solves efficiently. The hypothesis accuracy score penalizes the red-herring runs significantly.
+# Verify it's running
+curl http://localhost:8000/health
+```
 
-**Hard task:** GPT-4o almost never spontaneously recognizes that a race condition can exist when all sequential tests pass. In the rare runs where it does solve it (~20%), it correctly identifies that the lock scope must encompass the entire read-modify-write cycle. The 1000-thread concurrent stress test filters out partial fixes where the race window is narrowed but not eliminated.
+### Docker
 
----
+```bash
+docker build -t agentdebugger-env .
+docker run -p 8000:8000 agentdebugger-env
+```
 
-## Setup & Usage
-
-### Local Development
+### Running the Baseline Inference Script
 
 ```bash
 git clone https://github.com/shasshaank/AgentDebuggerEnv
@@ -380,87 +277,71 @@ curl http://localhost:8000/health
 # Run baseline inference
 export API_BASE_URL="https://api.openai.com/v1"
 export MODEL_NAME="gpt-4o"
-export HF_TOKEN="your_openai_api_key"
+export HF_TOKEN="your_api_key"
 export ENV_BASE_URL="http://localhost:8000"
 python inference.py
 ```
 
-### Docker
+Using Meta-Llama via HuggingFace (Recommended):
 
 ```bash
-# Build
-docker build -t agentdebugger-env .
-
-# Run
-docker run -p 8000:8000 agentdebugger-env
-
-# Run with inference against the containerized environment
-docker run -p 8000:8000 \
-  -e API_BASE_URL="https://api.openai.com/v1" \
-  -e MODEL_NAME="gpt-4o" \
-  -e HF_TOKEN="your_key" \
-  agentdebugger-env
-```
-
-### Quick API Test
-
-```bash
-# Reset the easy task
-curl -X POST http://localhost:8000/reset \
-  -H "Content-Type: application/json" \
-  -d '{"task_id": "easy"}'
-
-# Submit a fix with hypothesis
-curl -X POST http://localhost:8000/step \
-  -H "Content-Type: application/json" \
-  -d '{
-    "action_type": "submit_fix",
-    "fixed_code": "def binary_search(arr, target):\n    left, right = 0, len(arr) - 1\n    while left <= right:\n        mid = (left + right) // 2\n        if arr[mid] == target:\n            return mid\n        elif arr[mid] < target:\n            left = mid + 1\n        else:\n            right = mid - 1\n    return -1",
-    "hypothesis": "The while loop uses left < right instead of left <= right, causing it to skip the last element."
-  }'
+export API_BASE_URL="https://router.huggingface.co/v1"
+export MODEL_NAME="meta-llama/Llama-3.1-70B-Instruct"
+export HF_TOKEN="your_huggingface_token"
+export ENV_BASE_URL="http://localhost:8000"
+python inference.py
 ```
 
 ---
 
-## Why This Environment Matters for Agent Research
+## Environment Variables
 
-Four specific failure modes in LLM agents are measurable and scorable here for the first time:
+| Variable | Description | Default |
+|---|---|---|
+| `API_BASE_URL` | LLM API endpoint | `https://router.huggingface.co/v1` |
+| `MODEL_NAME` | Model identifier | `meta-llama/Llama-3.1-70B-Instruct` |
+| `HF_TOKEN` | Hugging Face Token (Read) | — |
+| `ENV_BASE_URL` | Environment server address | `http://localhost:8000` |
 
-**1. Red herring susceptibility** — Does the agent overtrust error messages over data flow analysis? The medium task's `hypothesis_accuracy` score measures this directly. An agent that follows the red herring scores 0.0 on hypothesis accuracy even if it eventually finds the correct fix by trial and error.
+---
 
-**2. Stagnation under uncertainty** — Does the agent repeat the same failed fix strategy instead of updating its hypothesis? The `-0.05` stagnation penalty and `hypothesis_accuracy` score together capture this. An agent that submits the same code twice scores negatively twice.
+## Project Structure
 
-**3. Exploration vs. exploitation** — The `query_context` action costs a step but provides information. The first query is free; subsequent ones cost `-0.05`. Agents that query productively before attempting a fix demonstrate better exploration behavior than those that immediately submit wrong fixes.
-
-**4. Test-suite as sufficient proof** — The hard task is specifically designed to test whether an agent knows when passing tests are not enough. An agent that sees 8/8 tests passing and immediately approves the code — without recognizing the concurrency issue — scores at most 0.40 and fails the most important grader component.
-
-All four failure modes produce distinct, interpretable score components in the `breakdown` field of every `Reward` response. This makes AgentDebuggerEnv useful not just as a benchmark but as a diagnostic tool for understanding where a specific model fails in iterative reasoning.
+```
+AgentDebuggerEnv/
+├── inference.py                  # Baseline script (root — hackathon requirement)
+├── env/
+│   ├── environment.py            # Core OpenEnv: reset(), step(), state()
+│   ├── models.py                 # Pydantic v2 Observation, Action, Reward
+│   ├── sandbox.py                # AST-based sandboxed code execution
+│   ├── server.py                 # FastAPI: /reset /step /state /health /tasks
+│   ├── tasks/
+│   │   ├── task_easy.py          # Off-by-one in binary search
+│   │   ├── task_medium.py        # Red herring authentication bug
+│   │   └── task_hard.py          # Concurrency race condition
+│   └── graders/
+│       ├── grader_easy.py        # Test pass + efficiency scoring
+│       ├── grader_medium.py      # Red herring detection + score floor fix
+│       └── grader_hard.py        # Sequential + concurrent stress test
+├── openenv.yaml
+├── Dockerfile
+├── requirements.txt
+└── uv.lock                       # Reproducible dependency resolution
+```
 
 ---
 
 ## Design Decisions
 
-**Why require a hypothesis?** The `hypothesis` field is mandatory on every `submit_fix` action. Missing it costs `-0.10` and the fix is not executed. This forces agents to articulate their reasoning, which enables the grader to score `hypothesis_accuracy` separately from `test_pass_ratio`. It also prevents degenerate strategies of submitting random code until something passes.
+**Why is hypothesis mandatory?** Requiring a hypothesis on every `submit_fix` prevents degenerate strategies of submitting random code until something passes. It also enables the grader to score `hypothesis_accuracy` independently from `test_pass_ratio` — measuring reasoning quality separately from outcome quality.
 
-**Why is `best_tests_passed` calculated from agent attempts only?** The medium and hard buggy codes start with 6/10 and 8/8 tests passing respectively. If the grader used the environment's `best_tests_passed` (which includes the initial buggy code run), a dummy agent that submits nothing would score 0.36 and 0.40 for free. The grader recalculates from the `attempts` list — which contains only what the agent actually submitted — ensuring the score floor is 0.0.
+**Why recalculate `test_pass_ratio` from the attempts list?** The medium buggy code passes 6/10 tests and the hard buggy code passes 8/8 tests sequentially. If the grader used the environment's `best_tests_passed` (which includes the initial buggy code run at reset), a dummy agent that submits nothing would score 0.36 and 0.40 for free. Recalculating from the `attempts` list guarantees the score floor is 0.0.
 
-**Why run the concurrent stress test 3 times?** Race conditions are non-deterministic. A partial fix that narrows the race window (but doesn't eliminate it) might pass once by luck. Requiring all 3 runs to pass filters out lucky partial fixes. A fix that passes 1 of 3 receives 0.15 — partial credit for progress, but not full credit.
+**Why run the concurrent stress test 5 times?** Race conditions are non-deterministic. A partial fix that narrows the race window may pass once by luck. Requiring 4 of 5 runs to pass provides a robust statistical threshold that filters out lucky partial fixes while allowing for minor runner jitter. Passing 2 of 5 gives 0.15 — partial credit for progress.
 
-**Why not use pytest directly?** Using pytest as the test runner would make output parsing dependent on pytest's output format and version. The environment uses a custom lightweight test runner written as a Python string executed in the sandbox, producing a consistent `"N passed, M failed"` format that `_parse_tests_passed()` can reliably parse across all platforms.
+**Why not use pytest directly?** Using pytest as the test runner makes output parsing dependent on pytest's version and output format. The environment uses a lightweight custom test runner embedded as a Python string, producing a consistent `"N passed, M failed"` format that `_parse_tests_passed()` can reliably parse across all platforms and environments.
 
----
-
-## Environment Configuration
-
-```bash
-# Required for inference.py
-API_BASE_URL   # LLM API endpoint (e.g. https://api.openai.com/v1)
-MODEL_NAME     # Model identifier (e.g. gpt-4o)
-HF_TOKEN       # API key / HuggingFace token
-
-# Optional — defaults to localhost:8000
-ENV_BASE_URL   # Environment server URL
-```
+**Why `query_context` costs reward after the first use?** Free unlimited context queries would allow agents to trivially read all available information before attempting any fix. The cost structure forces agents to make strategic decisions about when additional information is worth spending a step on — which is a core part of real debugging under time pressure.
 
 ---
 
@@ -468,8 +349,16 @@ ENV_BASE_URL   # Environment server URL
 
 **License:** MIT — see [LICENSE](LICENSE)
 
-**Authors:** Pranav,Shashaank (Team Endurance)
+**Author:** Shashaank | GitHub: [@shasshaank](https://github.com/shasshaank) | HF: [@shashaank0707](https://huggingface.co/shashaank0707)
+
+**Live Environment:** https://huggingface.co/spaces/shashaank0707/AgentDebugger-env
 
 **Submitted to:** Meta + PyTorch + HuggingFace OpenEnv Hackathon
 
-**Live Environment:** https://huggingface.co/spaces/shashaank0707/AgentDebugger-env
+---
+
+## Submission Integrity
+
+- **Commit SHA:** `5c507c313ff2c209d7b770af6f08cf6ed6ab1568`
+- **Last Verified Sync:** 2026-04-09
+- **Platform Match:** GitHub and HF Space are in sync at this HEAD

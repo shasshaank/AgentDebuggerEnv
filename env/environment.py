@@ -6,20 +6,31 @@ debugging episode lifecycle including task initialization, action
 processing, and reward calculation.
 """
 
+import os
+import json
 import re
 import math
+import random
 from typing import Dict, Any, Optional, Tuple
 
-from env.models import Observation, Action, Reward, FixAttempt
+from env.models import Observation, Action, Reward, FixAttempt, parse_agent_output, StructuredAgentOutput
 from env.sandbox import execute_code
 from env.tasks.registry import get_task, list_tasks
 from env.graders import get_grader
+from server.reward_calculator import DebugRewardCalculator
+
+# Optional W&B — only activates if key is present
+try:
+    import wandb
+    WANDB_AVAILABLE = os.environ.get("WANDB_API_KEY") is not None
+except ImportError:
+    WANDB_AVAILABLE = False
 
 
 class DebuggerEnvironment:
     """Core debugging environment implementing the OpenEnv interface."""
 
-    def __init__(self):
+    def __init__(self, curriculum_step: int = 0):
         self._task_config: Optional[dict] = None
         self._observation: Optional[Observation] = None
         self._cumulative_reward: float = 0.0
@@ -31,6 +42,14 @@ class DebuggerEnvironment:
         self._done: bool = True
         self._step_number: int = 0
         self._prev_tests_passed: int = 0
+
+        # Curriculum learning state
+        self.curriculum_step: int = curriculum_step
+        self.reward_calculator: DebugRewardCalculator = DebugRewardCalculator()
+        self.current_episode_trajectory: list[dict] = []
+        self.current_bug: Optional[dict] = None
+        self.turn_number: int = 0
+        self.bugs: list[dict] = self._load_bugs_for_curriculum(curriculum_step)
 
     def reset(self, task_id: str) -> dict:
         """
@@ -150,6 +169,228 @@ class DebuggerEnvironment:
             "hint_used": self._observation.hint_used,
         }
 
+    # ── Curriculum Learning ──────────────────────────────────────────────────
+
+    def _load_bugs_for_curriculum(self, step: int) -> list[dict]:
+        """
+        Curriculum schedule:
+        Steps 0-299:   Tier 1 only (easy — off-by-one, wrong operator)
+        Steps 300-599: Tier 1 + Tier 2 (70/30 split)
+        Steps 600+:    Tier 1 + Tier 2 + Tier 3 (40/40/20 split)
+        """
+        def load_tier(tier: int) -> list[dict]:
+            path = f"data/bugs_tier{tier}.jsonl"
+            if not os.path.exists(path):
+                return []
+            bugs = []
+            with open(path) as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        bugs.append(json.loads(line))
+            return bugs
+
+        tier1 = load_tier(1)
+
+        if step < 300:
+            return tier1
+        elif step < 600:
+            tier2 = load_tier(2)
+            n2 = int(len(tier2) * 0.43)  # ~70/30 split
+            return tier1 + tier2[:n2]
+        else:
+            tier2 = load_tier(2)
+            tier3 = load_tier(3)
+            return tier1 + tier2 + tier3
+
+    def advance_curriculum(self, step: int):
+        """Call from training loop at steps 300 and 600."""
+        self.curriculum_step = step
+        self.bugs = self._load_bugs_for_curriculum(step)
+
+    def _active_tiers(self) -> list[int]:
+        if self.curriculum_step < 300:
+            return [1]
+        elif self.curriculum_step < 600:
+            return [1, 2]
+        return [1, 2, 3]
+
+    # ── Curriculum Step / GRPO-Compatible Methods ────────────────────────────
+
+    def reset_curriculum(self) -> dict:
+        """
+        Start a fresh curriculum episode. Selects a random bug from the
+        curriculum-appropriate pool. Returns initial observation dict.
+        """
+        if not self.bugs:
+            raise ValueError("No bugs loaded. Run data/generate_bugs.py first.")
+
+        self.current_bug = random.choice(self.bugs)
+        self.current_episode_trajectory = []
+        self.turn_number = 0
+
+        return {
+            "buggy_code": self.current_bug.get("buggy_code", ""),
+            "error_message": self.current_bug.get("initial_error", "Some tests are failing."),
+            "test_results": {"passed": 0, "failed": 0, "total": len(self.current_bug.get("test_cases", []))},
+            "turn_number": 0,
+            "history": [],
+        }
+
+    def step_curriculum(self, raw_text: str) -> dict:
+        """
+        Process one structured agent response in the curriculum setting.
+        Returns {observation, reward, done, info}.
+        """
+        agent_output = parse_agent_output(raw_text)
+
+        # Run fix against test cases if agent proposes one
+        test_results = {"passed": 0, "failed": 0, "total": 0, "newly_broken": 0}
+        if agent_output.action == "propose_fix" and self.current_bug:
+            test_results = self._run_fix_safely(
+                proposed_code=agent_output.detail,
+                bug=self.current_bug,
+            )
+
+        # Compute reward
+        reward_breakdown = self.reward_calculator.compute_turn_reward(
+            agent_output=agent_output,
+            ground_truth={
+                "bug_function": self.current_bug.get("bug_location", {}).get("function", "") if self.current_bug else "",
+                "bug_line": self.current_bug.get("bug_location", {}).get("line_start", -1) if self.current_bug else -1,
+                "bug_type": self.current_bug.get("bug_type", "") if self.current_bug else "",
+                "canonical_fix_code": self.current_bug.get("original_code", "") if self.current_bug else "",
+            },
+            test_results=test_results,
+            turn_number=self.turn_number,
+        )
+
+        # Record turn in episode trajectory
+        self.current_episode_trajectory.append({
+            "turn": self.turn_number,
+            "agent_output": agent_output,
+            "test_results": test_results,
+            "reward": reward_breakdown,
+        })
+
+        self.turn_number += 1
+
+        # Determine if episode is done
+        solved = reward_breakdown.fix_quality >= 0.35
+        max_turns_reached = self.turn_number >= self.reward_calculator.MAX_TURNS
+        gave_up = agent_output.action == "give_up"
+        done = solved or max_turns_reached or gave_up
+
+        # Log to W&B at episode end
+        if done and WANDB_AVAILABLE:
+            self._log_episode_to_wandb(reward_breakdown, solved)
+
+        return {
+            "observation": {
+                "buggy_code": self.current_bug.get("buggy_code", "") if self.current_bug else "",
+                "error_message": self.current_bug.get("initial_error", "") if self.current_bug else "",
+                "test_results": test_results,
+                "turn_number": self.turn_number,
+                "history": [
+                    {
+                        "turn": t["turn"],
+                        "action": t["agent_output"].action,
+                        "reward": t["reward"].total,
+                    }
+                    for t in self.current_episode_trajectory
+                ],
+            },
+            "reward": reward_breakdown.total,
+            "done": done,
+            "info": {
+                "reward_breakdown": reward_breakdown.__dict__,
+                "turn_number": self.turn_number,
+                "solved": solved,
+                "bug_tier": self.current_bug.get("difficulty", 0) if self.current_bug else 0,
+            },
+        }
+
+    def _run_fix_safely(self, proposed_code: str, bug: dict) -> dict:
+        """Run proposed fix against test cases with timeout. NEVER execute without timeout."""
+        import subprocess
+        import tempfile
+
+        if not proposed_code or not bug.get("test_cases"):
+            return {"passed": 0, "failed": 0, "total": 0, "newly_broken": 0}
+
+        test_cases = bug["test_cases"]
+        func_name = bug.get("function_name", "")
+        passed = 0
+
+        for test in test_cases:
+            inp = test["input"]
+            expected = test["expected_output"]
+
+            if isinstance(inp, (list, tuple)):
+                args_str = ", ".join(repr(x) for x in inp)
+            else:
+                args_str = repr(inp)
+
+            script = f"""
+{proposed_code}
+
+try:
+    result = {func_name}({args_str})
+    expected = {repr(expected)}
+    print("PASS" if result == expected else f"FAIL: got {{result}}, expected {{expected}}")
+except Exception as e:
+    print(f"ERROR: {{type(e).__name__}}: {{e}}")
+"""
+            try:
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+                    f.write(script)
+                    fname = f.name
+
+                result = subprocess.run(
+                    ["python", fname],
+                    capture_output=True, text=True, timeout=5
+                )
+
+                try:
+                    os.unlink(fname)
+                except Exception:
+                    pass
+
+                if "PASS" in result.stdout:
+                    passed += 1
+            except subprocess.TimeoutExpired:
+                pass  # timeout = failed test
+            except Exception:
+                pass
+
+        failed = len(test_cases) - passed
+        return {
+            "passed": passed,
+            "failed": failed,
+            "total": len(test_cases),
+            "newly_broken": 0,
+        }
+
+    def _log_episode_to_wandb(self, final_reward, solved: bool):
+        """Log episode metrics to W&B. Only called if WANDB_AVAILABLE."""
+        if not WANDB_AVAILABLE:
+            return
+        breakdown = self.reward_calculator.get_reward_breakdown_for_logging(
+            self.current_episode_trajectory
+        )
+        episode_reward = self.reward_calculator.compute_episode_reward(
+            self.current_episode_trajectory
+        )
+
+        wandb.log({
+            "episode/reward_total": episode_reward,
+            "episode/solved": int(solved),
+            "episode/turns_used": self.turn_number,
+            "episode/bug_tier": self.current_bug.get("difficulty", 0) if self.current_bug else 0,
+            "episode/curriculum_step": self.curriculum_step,
+            **breakdown,
+        })
+
     # ── Action Handlers ──────────────────────────────────────────────────────
 
     def _handle_submit_fix(self, action: Action) -> Dict[str, Any]:
@@ -249,7 +490,7 @@ class DebuggerEnvironment:
 
     def _handle_query_context(self, action: Action) -> Dict[str, Any]:
         """Handle query_context action."""
-        valid_query_types = ["function_signature", "related_code", "error_explanation", "test_details"]
+        valid_query_types = ["function_signature", "related_code", "error_explanation", "test_details", "test_suggestion"]
 
         if action.query_type not in valid_query_types:
             return self._make_response(
@@ -511,5 +752,22 @@ class DebuggerEnvironment:
                     return f"Test details for '{query_target}':\n" + "\n".join(relevant)
 
             return f"Full test suite:\n{test_suite}"
+        
+        elif query_type == "test_suggestion":
+            # Provide a specific hint for the hard task if they ask
+            if task["task_id"] == "hard":
+                return (
+                    "HINT: The sequential tests pass, but have you considered testing with "
+                    "concurrent threads? There might be a race condition that only appears "
+                    "under load. Try writing a test that uses 'threading' to call methods "
+                    "simultaneously."
+                )
+            elif task["task_id"] == "medium":
+                return (
+                    "HINT: Don't trust the first error message you see. Trace the data flow "
+                    "backwards to see where the invalid input was actually generated."
+                )
+            else:
+                return "HINT: Look closely at the comparison operators and loop boundaries."
 
         return "No information available for this query."
