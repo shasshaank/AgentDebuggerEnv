@@ -326,10 +326,7 @@ class DebuggerEnvironment:
             inp = test["input"]
             expected = test["expected_output"]
 
-            if isinstance(inp, (list, tuple)):
-                args_str = ", ".join(repr(x) for x in inp)
-            else:
-                args_str = repr(inp)
+            args_str = ", ".join(repr(x) for x in inp)
 
             script = f"""
 {proposed_code}
