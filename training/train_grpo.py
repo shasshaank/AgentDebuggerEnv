@@ -413,7 +413,7 @@ config = GRPOConfig(
     lr_scheduler_type="cosine",
     warmup_steps=20 if args.test else 40,
     num_generations=8,                   # GRPO key: more rollouts = stronger learning signal (was 4)
-    max_new_tokens=512,                  # longer responses = more complete fixes (was 400)
+    max_completion_length=512,           # longer responses = more complete fixes (was 400)
     temperature=0.9,                     # slightly higher temp = more diverse rollouts for GRPO
     logging_steps=5 if args.test else 5, # log every 5 steps for dense W&B curve
     save_steps=50 if args.test else 100,
