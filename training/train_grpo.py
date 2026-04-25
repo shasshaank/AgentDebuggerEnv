@@ -33,7 +33,7 @@ parser.add_argument("--test", action="store_true", help="Run 10 steps for testin
 parser.add_argument("--test-local", action="store_true", dest="test_local",
                     help="Sanity-check reward function locally without any model or GPU")
 parser.add_argument("--resume", type=str, default=None, help="Path to checkpoint")
-parser.add_argument("--max_steps", type=int, default=1000)
+parser.add_argument("--max_steps", type=int, default=500)
 args = parser.parse_args()
 
 # ── Install dependencies (for Colab/HF Spaces) ───────────────────────────────
@@ -104,11 +104,10 @@ def load_bugs(tier: int) -> list[dict]:
 
 def get_bugs_for_step(step: int) -> list[dict]:
     tier1 = load_bugs(1)
-    if step < 300:
+    if step < 150:
         return tier1
-    elif step < 600:
-        tier2 = load_bugs(2)
-        return tier1 + tier2[:int(len(tier2) * 0.43)]
+    elif step < 350:
+        return tier1 + load_bugs(2)
     return tier1 + load_bugs(2) + load_bugs(3)
 
 def bug_to_prompt(bug: dict) -> str:
@@ -360,7 +359,7 @@ trainer = GRPOTrainer(
 class CurriculumCallback(TrainerCallback):
     def on_step_end(self, args, state, control, **kwargs):
         step = state.global_step
-        if step in [300, 600]:
+        if step in [150, 350]:
             trainer.train_dataset = make_dataset(step)
             print(f"\nCurriculum advanced at step {step}!")
             if WANDB_API_KEY:
