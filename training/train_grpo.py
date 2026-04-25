@@ -38,7 +38,7 @@ args = parser.parse_args()
 
 # ── Install dependencies (for Colab/HF Spaces) ───────────────────────────────
 if os.environ.get("COLAB_RELEASE_TAG") or os.environ.get("SPACE_ID"):
-    os.system("pip install -q trl wandb datasets bitsandbytes peft transformers accelerate")
+    os.system("pip install -q trl wandb datasets bitsandbytes>=0.43 peft>=0.10 transformers>=4.40 accelerate>=0.30")
 
 # ── GPU/training imports (skipped in --test-local mode) ───────────────────────
 if not args.test_local:
@@ -360,7 +360,7 @@ def run_baseline(n: int = 20) -> dict:
         completion = tokenizer.decode(out[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
         r = reward_fn([completion], [prompt], bug_metadata=[bug])
         rewards.append(r[0])
-        if r[0] > 0.20:   # threshold: any positive structured response counts
+        if r[0] > 0.20:
             solved += 1
 
     result = {"solve_rate": solved / max(len(bugs), 1), "avg_reward": sum(rewards) / max(len(rewards), 1), "rewards": rewards}
