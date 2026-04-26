@@ -47,8 +47,8 @@ if not args.test_local:
         "wandb==0.18.7",
         "datasets==3.0.2",
         "transformers==4.44.2",
-        "accelerate==1.0.1",
-        "trl==0.12.2",
+        "accelerate==0.34.2",
+        "trl==0.15.2",
         "peft==0.13.2",
         "bitsandbytes==0.43.3",
     ]
@@ -466,6 +466,7 @@ config = GRPOConfig(
     warmup_steps=10 if args.test else 30,
     num_generations=_num_gen,
     max_completion_length=_max_comp,
+    temperature=0.9,
     logging_steps=5,
     save_steps=50,
     report_to="wandb" if WANDB_API_KEY else "none",
@@ -476,7 +477,7 @@ trainer = GRPOTrainer(
     args=config,
     train_dataset=make_dataset(0),
     reward_funcs=reward_fn,
-    tokenizer=tokenizer,
+    processing_class=tokenizer,
 )
 
 # ── Curriculum callback ───────────────────────────────────────────────────────
