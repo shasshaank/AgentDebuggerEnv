@@ -46,4 +46,8 @@ sandbox_*.py
 /tmp/sandbox_*
 
 instructions.md
-CURSOR_INSTRUCTIONS_V2.md
+CURSOR_INSTRUCTIONS_V2.md.tmp_venv/
+venv_test*/
+scratch/
+agentdebugger_env.egg-info/
+baseline_results.json
