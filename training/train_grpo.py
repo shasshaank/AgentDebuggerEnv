@@ -303,23 +303,30 @@ if torch.cuda.is_available():
 
 COMPUTE_DTYPE = torch.bfloat16 if _is_ampere_plus else torch.float16
 
-# Scale batch/generation config to available VRAM
-if _gpu_vram_gb >= 40:          # A100 40GB / A100 80GB
-    _batch       = 2
-    _grad_accum  = 4            # effective batch = 8
-    _num_gen     = 8
+# Scale batch/generation config to available VRAM.
+# GRPO constraint: per_device_train_batch_size % num_generations == 0
+if _gpu_vram_gb >= 70:          # A100 80GB
+    _batch       = 8
+    _grad_accum  = 1            # effective batch = 8
+    _num_gen     = 8            # 8 % 8 == 0
     _max_comp    = 256
     _lora_r      = 16
-elif _gpu_vram_gb >= 20:        # A10G 24GB / V100 32GB — float16 model ~14GB
-    _batch       = 1
-    _grad_accum  = 8
-    _num_gen     = 4
+elif _gpu_vram_gb >= 40:        # A100 40GB
+    _batch       = 4
+    _grad_accum  = 2            # effective batch = 8
+    _num_gen     = 4            # 4 % 4 == 0
+    _max_comp    = 256
+    _lora_r      = 16
+elif _gpu_vram_gb >= 20:        # A10G 24GB / V100 32GB
+    _batch       = 2
+    _grad_accum  = 4
+    _num_gen     = 2            # 2 % 2 == 0
     _max_comp    = 192
     _lora_r      = 8
 else:                           # T4 15GB / anything smaller
-    _batch       = 1
-    _grad_accum  = 8
-    _num_gen     = 4
+    _batch       = 2
+    _grad_accum  = 4
+    _num_gen     = 2            # 2 % 2 == 0
     _max_comp    = 160
     _lora_r      = 8
 
