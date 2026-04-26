@@ -1,12 +1,11 @@
-FROM pytorch/pytorch:2.3.0-cuda12.1-cudnn8-runtime
+FROM python:3.10-slim
 
 WORKDIR /app
 
 # Install curl for healthcheck
 RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
-# torch + CUDA 12.1 + cuDNN 8 are already in the base image.
-# requirements.txt installs only the remaining app-level deps.
+# Install dependencies first (layer cache optimization)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
