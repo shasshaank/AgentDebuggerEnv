@@ -1,10 +1,14 @@
-gradio[oauth,mcp]==6.13.0
-pydantic>=2.0.0
-wandb>=0.18.0
-datasets>=3.0.0
-transformers>=4.46.0
-accelerate>=1.0.0
+# ── Training dependencies ──────────────────────────────────────────────────────
+# Fully pinned to a pre-validated compatible set.
+# DO NOT add loose deps here — they cause pip backtracking (resolution-too-deep).
+# gradio is intentionally omitted: HF Spaces injects gradio[oauth,mcp]==6.13.0 itself.
+
+wandb==0.18.7
+datasets==3.0.2
+transformers==4.46.3
+accelerate==1.0.1
 trl==0.14.0
-mergekit
-bitsandbytes>=0.43.0
 peft==0.13.2
+bitsandbytes==0.43.3
+mergekit==0.1.4
+pydantic==2.10.6

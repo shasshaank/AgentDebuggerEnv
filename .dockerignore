@@ -2,6 +2,7 @@
 .gitignore
 .DS_Store
 .venv
+.env
 .pytest_cache
 __pycache__
 *.pyc
@@ -23,3 +24,17 @@ build
 .cursor
 .vscode
 
+# uv lock file (not needed in Docker, causes confusion)
+uv.lock
+
+# Test venvs created during debugging
+venv_test*
+.tmp_venv
+
+# Scratch test scripts
+test_pip*.sh
+req_test*.txt
+get_logs.py
+
+# Large temp dirs
+scratch/
