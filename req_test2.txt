@@ -1,0 +1,9 @@
+gradio[oauth,mcp]==6.13.0
+pydantic
+wandb
+datasets
+transformers
+accelerate
+trl==0.14.0
+mergekit
+peft
