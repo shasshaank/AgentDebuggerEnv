@@ -1,5 +1,3 @@
-
-```markdown
 ---
 title: AgentDebuggerEnv
 emoji: 🐞
@@ -108,4 +106,3 @@ The easiest way to re-run the exact GRPO training pipeline is via our Jupyter No
 ### 👥 Team Endurance
 * **Shashaank Jain** | GitHub: [@shasshaank](https://github.com/shasshaank) | Email: *[Add Email]*
 * **[Pranav Pulipati]** | GitHub: *[@PulipatiPranav](https://github.com/PulipatiPranav)* | Email: *[pranavpulipatix@gmail.com]*
-```
