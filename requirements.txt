@@ -1,3 +1,4 @@
-# torch must be installed at build time (CUDA wheel is ~2GB, too slow at runtime)
-# Everything else is installed at runtime in training/train_grpo.py
-torch
+# torch, CUDA 12.1, and cuDNN 8 are pre-installed in the base image:
+# pytorch/pytorch:2.3.0-cuda12.1-cudnn8-runtime
+# Do NOT add torch here — pip would resolve to the CPU wheel from default PyPI
+# and overwrite the CUDA-enabled torch from the base image.
