@@ -54,16 +54,16 @@ Our training run clearly demonstrates rapid policy adaptation. The model success
 
 *(Note for Hackathon Judges: Live Weights & Biases charts and Gradio UI are embedded below as evidence of the training run).*
 
-![Total Reward](images/total.png)
-![Format Compliance](images/format_compliance.png)
+![Total Reward](https://raw.githubusercontent.com/shasshaank/AgentDebuggerEnv/main/images/total.png)
+![Format Compliance](https://raw.githubusercontent.com/shasshaank/AgentDebuggerEnv/main/images/format_compliance.png)
 
 *Additional Training Metrics:*
 <p align="center">
-  <img src="images/hypothesis_quality.png" width="48%" />
-  <img src="images/semantic.png" width="48%" />
+  <img src="https://raw.githubusercontent.com/shasshaank/AgentDebuggerEnv/main/images/hypothesis_quality.png" width="48%" />
+  <img src="https://raw.githubusercontent.com/shasshaank/AgentDebuggerEnv/main/images/semantic.png" width="48%" />
 </p>
 
-![Gradio UI Training Monitor](images/gradio%20UI.png)
+![Gradio UI Training Monitor](https://raw.githubusercontent.com/shasshaank/AgentDebuggerEnv/main/images/gradio%20UI.png)
 
 * **Format Compliance:** Scaled to 1.0 (max) within 50 steps.
 * **Total Reward:** Scaled from baseline ~0.4 to peaks of ~1.0 by step 250.
