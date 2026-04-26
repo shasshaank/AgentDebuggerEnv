@@ -386,7 +386,8 @@ def reward_fn(completions: list[str], prompts: list[str], **kwargs) -> list[floa
     GRPO learns from RELATIVE differences within each group.
     """
     rewards = []
-    bugs = kwargs.get("bug_metadata", [{}] * len(completions))
+    bugs_raw = kwargs.get("bug_metadata", [{}] * len(completions))
+    bugs = [json.loads(b) if isinstance(b, str) else b for b in bugs_raw]
 
     for completion, bug in zip(completions, bugs):
         try:
@@ -452,7 +453,7 @@ model.train()
 # ── Build initial dataset ─────────────────────────────────────────────────────
 def make_dataset(step: int) -> Dataset:
     bugs = get_bugs_for_step(step)
-    return Dataset.from_list([{"prompt": bug_to_prompt(b), "bug_metadata": b} for b in bugs])
+    return Dataset.from_list([{"prompt": bug_to_prompt(b), "bug_metadata": json.dumps(b)} for b in bugs])
 
 # ── Training config ───────────────────────────────────────────────────────────
 config = GRPOConfig(
