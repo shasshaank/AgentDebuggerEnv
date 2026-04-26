@@ -49,8 +49,15 @@ if os.environ.get("FORCE_BOOTSTRAP_DEPS") == "1":
 
 # ── GPU/training imports (skipped in --test-local mode) ───────────────────────
 if not args.test_local:
+    # wandb is not in requirements.txt (conflicts with gradio over click versioning)
+    # Install it at runtime before importing
+    try:
+        import wandb
+    except ImportError:
+        os.system(f"{sys.executable} -m pip install -q 'wandb>=0.18.0'")
+        import wandb
+    
     import torch
-    import wandb
     from datasets import Dataset
     from transformers import (
         AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, TrainerCallback
