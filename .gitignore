@@ -56,3 +56,5 @@ venv_test*/
 scratch/
 agentdebugger_env.egg-info/
 baseline_results.json
+CURSOR_INSTRUCTIONS_V2.md
+HANDOVER.md
