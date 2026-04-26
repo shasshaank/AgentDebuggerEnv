@@ -25,7 +25,7 @@ LLMs often hallucinate bug fixes via blind trial-and-error. Real debugging in pr
 * **Hypothesis-Driven Debugging (NeurIPS 2025):** Recent research presented at NeurIPS demonstrates that forcing an LLM to formulate a concrete hypothesis before generating code significantly improves debugging accuracy. Inspired by this, our environment mandates a strict `OBSERVATION` → `HYPOTHESIS` → `ACTION` loop. Every single step taken by the agent must be preceded by a formal hypothesis to receive a positive reward.
 * **Literature-Backed Reward Criteria:** Our continuous, multi-objective reward shaping architecture is heavily influenced by the latest findings in LLM reasoning and code generation capabilities, specifically drawing from:
   * [arXiv:2408.10215](https://arxiv.org/abs/2408.10215)
-  * [arXiv:2601.19100](https://arxiv.org/abs/2601.19100) (Amazon NeurIPS Paper)
+  * [arXiv:2601.19100](https://arxiv.org/abs/2601.19100)
 * **Curriculum Learning for RL:** A flat bug distribution caused early policy collapse. We implemented a 3-tier curriculum, introducing complex logic bugs only after structural formatting and syntax localization stabilized.
 * **Hardened Sandboxed Grading:** Evaluating arbitrary LLM-generated fixes introduces severe RCE risks. We engineered a secure execution sandbox that restricts execution time, limits memory, and completely replaces unsafe `exec()` calls, ensuring deterministic and safe grading.
 
@@ -50,7 +50,7 @@ LLMs often hallucinate bug fixes via blind trial-and-error. Real debugging in pr
 Our training run clearly demonstrates rapid policy adaptation. The model successfully learned the `OBSERVATION/HYPOTHESIS/ACTION` constraint almost instantly and navigated the tier-2 difficulty bump (step 150) with a textbook drop-and-recover curve.
 
 ## Training Results
-[W&B Run](https://wandb.ai/shashaankjain07-keshav-memorial-college-of-law/AgentDebuggerEnv/runs/vylbqd5m?nw=nwusershashaankjain07) | [Colab Notebook](#) | [YouTube Demo](#) | [HF Blog](#)
+[W&B Run](https://wandb.ai/shashaankjain07-keshav-memorial-college-of-law/AgentDebuggerEnv/runs/vylbqd5m?nw=nwusershashaankjain07) | [HF Blog](#)
 
 *(Note for Hackathon Judges: Live Weights & Biases charts and Gradio UI are embedded below as evidence of the training run).*
 
@@ -104,5 +104,5 @@ The easiest way to re-run the exact GRPO training pipeline is via our Jupyter No
 ---
 
 ### 👥 Team Endurance
-* **Shashaank Jain** | GitHub: [@shasshaank](https://github.com/shasshaank) | Email: *[Add Email]*
+* **Shashaank Jain** | GitHub: [@shasshaank](https://github.com/shasshaank) | Email: *[shashaankjain07@gmail.com]*
 * **[Pranav Pulipati]** | GitHub: *[@PulipatiPranav](https://github.com/PulipatiPranav)* | Email: *[pranavpulipatix@gmail.com]*
