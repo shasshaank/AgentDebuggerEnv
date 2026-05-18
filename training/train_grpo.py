@@ -37,8 +37,7 @@ parser.add_argument("--resume", type=str, default=None, help="Path to checkpoint
 parser.add_argument("--max_steps", type=int, default=500)
 args = parser.parse_args()
 
-HF_TOKEN = os.getenv("HF_TOKEN")
-WANDB_API_KEY = os.getenv("WANDB_API_KEY")
+
 # ── Runtime dependency install ─────────────────────────────────────────────────
 # requirements.txt only has torch (too large to install at runtime).
 # Everything else is installed here, after gradio is already up.
@@ -120,8 +119,10 @@ HF_REPO = "shashaank0707/AgentDebugger-trained"
 MAX_STEPS = 10 if args.test else args.max_steps
 CHECKPOINT_DIR = "./checkpoints"
 
-# W&B — optional but strongly recommended for judging
+# W&B and HF Token
 WANDB_API_KEY = os.environ.get("WANDB_API_KEY", "") if not args.test_local else ""
+HF_TOKEN = os.environ.get("HF_TOKEN")
+
 if WANDB_API_KEY:
     wandb.init(
         project="AgentDebuggerEnv",
@@ -597,7 +598,7 @@ if WANDB_API_KEY:
 # ── Save and push ─────────────────────────────────────────────────────────────
 model.save_pretrained("./final_model")
 tokenizer.save_pretrained("./final_model")
-HF_TOKEN = os.environ.get("HF_TOKEN")
+
 if HF_TOKEN and not args.test:
     model.push_to_hub(HF_REPO, token=HF_TOKEN, private=True)
     tokenizer.push_to_hub(HF_REPO, token=HF_TOKEN, private=True)
