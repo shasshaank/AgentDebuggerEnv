@@ -37,6 +37,8 @@ parser.add_argument("--resume", type=str, default=None, help="Path to checkpoint
 parser.add_argument("--max_steps", type=int, default=500)
 args = parser.parse_args()
 
+HF_TOKEN = os.getenv("HF_TOKEN")
+WANDB_API_KEY = os.getenv("WANDB_API_KEY")
 # ── Runtime dependency install ─────────────────────────────────────────────────
 # requirements.txt only has torch (too large to install at runtime).
 # Everything else is installed here, after gradio is already up.
