@@ -314,6 +314,7 @@ class DebuggerEnvironment:
         """Run proposed fix against test cases with timeout. NEVER execute without timeout."""
         import subprocess
         import tempfile
+        import sys
 
         if not proposed_code or not bug.get("test_cases"):
             return {"passed": 0, "failed": 0, "total": 0, "newly_broken": 0}
@@ -344,7 +345,7 @@ except Exception as e:
                     fname = f.name
 
                 result = subprocess.run(
-                    ["python", fname],
+                    [sys.executable, fname],
                     capture_output=True, text=True, timeout=5
                 )
 
