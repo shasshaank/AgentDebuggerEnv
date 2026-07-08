@@ -12,8 +12,6 @@ pinned: false
 
 **Hackathon Links:**
 - 🌌 **[Live Hugging Face Space](https://huggingface.co/spaces/agentDebugger/AgentDebugger-training-v3)** 
-- 📊 **[Model Leaderboard Space](https://huggingface.co/spaces/shashaank0707/AgentDebugger-leaderboard)** *(coming soon)*
-- 📹 **[Watch the 2-Minute Demo](#)** *(Replace with YouTube Link)*
 - 📝 **[Read the Technical Writeup](./Blog.md)**
 
 ### 🚀 One-Line Pitch
@@ -37,14 +35,14 @@ LLMs often hallucinate bug fixes via blind trial-and-error. Real debugging in pr
 * **Live Monitor:** A Gradio dashboard streaming `stdout` and Weights & Biases metrics directly from the active training container.
 
 ### ⚡ What Makes This Impressive
-* **Zero-to-One in 250 Steps:** Achieved a ~2.5x increase in total reward within just 250 steps, demonstrating extreme sample efficiency via GRPO.
+* **Zero-to-One in 500 Steps:** Achieved a ~2.5x increase in total reward within 500 steps, demonstrating extreme sample efficiency via GRPO.
 * **Dynamic Hardware Scaling:** The training pipeline natively detects hardware capability (A100/H100 vs. T4) and automatically scales `batch_size`, `grad_accum`, and compute `dtype` (`bfloat16`/`float16`)—eliminating OOM errors across deployment environments.
 * **Frictionless Deployment:** Bypassed heavy dependency constraints (PyTorch/TRL vs. Gradio PIP conflicts) by engineering a lazy-loading runtime environment that ensures deterministic Docker builds.
 
 ### 🛠️ Tech Stack
 * **Frameworks:** OpenEnv, FastAPI, Docker
 * **RL Pipeline:** HuggingFace TRL (GRPO), Peft (LoRA)
-* **Models:** Qwen2.5-Coder-7B-Instruct (Base), Llama-3.1-70B (Evaluator)
+* **Models:** Qwen2.5-Coder-3B-Instruct (Base), Llama-3.1-70B (Evaluator)
 * **Telemetry:** Weights & Biases
 
 ### 📊 Results & Benchmarks
@@ -67,7 +65,7 @@ Our training run clearly demonstrates rapid policy adaptation. The model success
 ![Gradio UI Training Monitor](https://raw.githubusercontent.com/shasshaank/AgentDebuggerEnv/main/images/gradio%20UI.png)
 
 * **Format Compliance:** Scaled to 1.0 (max) within 50 steps.
-* **Total Reward:** Scaled from baseline ~0.4 to peaks of ~1.0 by step 250.
+* **Total Reward:** Scaled from baseline ~0.4 to peaks of ~1.0 by step 500.
 * **Baseline Solve Rate:** 100.0% validation on tiered data structure.
 
 ### 🔥 Challenges & How They Were Solved
