@@ -106,4 +106,4 @@ The easiest way to re-run the exact GRPO training pipeline is via our Jupyter No
 
 ### 👥 Team Endurance
 * **Shashaank Jain** | GitHub: [@shasshaank](https://github.com/shasshaank) | Email: *[shashaankjain07@gmail.com]*
-* **[Pranav Pulipati]** | GitHub: *[@PulipatiPranav](https://github.com/PulipatiPranav)* | Email: *[pranavpulipatix@gmail.com]*
+* **Pranav Pulipati** | GitHub: [@shasshaank](https://github.com/shasshaank) | Email: *[pranavpulipatix@gmail.com]*

@@ -143,7 +143,7 @@ MOCK_TRAJECTORIES = {
 CUSTOM_CSS = """
 body {
     background-color: #030712 !important;
-    background-image: radial-gradient(circle at 50% -20%, #1e1b4b, #030712 60%) !important;
+    background-image: radial-gradient(circle at 50% -20%, #1a103c, #030712 70%) !important;
     font-family: 'Inter', -apple-system, sans-serif !important;
 }
 
@@ -154,29 +154,41 @@ body {
 
 /* Glassmorphism Panels */
 .glass-panel {
-    background: rgba(17, 24, 39, 0.6) !important;
+    background: rgba(17, 24, 39, 0.4) !important;
     backdrop-filter: blur(16px) !important;
     -webkit-backdrop-filter: blur(16px) !important;
-    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    border: 1px solid rgba(255, 255, 255, 0.05) !important;
     border-radius: 20px !important;
     padding: 2rem !important;
     box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.5) !important;
 }
 
 .glass-header {
-    background: linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(59, 130, 246, 0.1)) !important;
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.05), rgba(59, 130, 246, 0.05)) !important;
     backdrop-filter: blur(16px) !important;
     -webkit-backdrop-filter: blur(16px) !important;
-    border: 1px solid rgba(139, 92, 246, 0.2) !important;
+    border: 1px solid rgba(255, 255, 255, 0.05) !important;
     border-radius: 24px !important;
     padding: 3rem 2rem !important;
     text-align: center;
     margin-bottom: 2.5rem;
-    box-shadow: 0 10px 30px -10px rgba(139, 92, 246, 0.3) !important;
+    box-shadow: 0 10px 30px -10px rgba(139, 92, 246, 0.2) !important;
+}
+
+/* Make standard Gradio forms, boxes and groups transparent to avoid "boxes inside boxes" */
+.gradio-container .form, 
+.gradio-container .box, 
+.gradio-container .group,
+.gradio-container .block,
+.gradio-container .panel {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
 }
 
 /* Title styling */
-.glass-header h1, .glass-header .prose h1 {
+.glass-header h1 {
     font-family: 'Outfit', sans-serif !important;
     font-size: 3.5rem !important;
     font-weight: 900 !important;
@@ -188,7 +200,7 @@ body {
     margin-bottom: 0.5rem !important;
 }
 
-.glass-header h3, .glass-header .prose h3 {
+.glass-header h3 {
     font-size: 1.25rem !important;
     color: #94a3b8 !important;
     font-weight: 500 !important;
@@ -196,7 +208,7 @@ body {
     margin-bottom: 0.5rem !important;
 }
 
-.glass-header p, .glass-header .prose p {
+.glass-header p {
     font-size: 1.05rem !important;
     color: #cbd5e1 !important;
     font-style: italic !important;
@@ -246,11 +258,22 @@ body {
     margin-top: 2rem !important;
 }
 
+/* Translucent styled sliders, dropdowns and inputs */
+.gradio-container select, 
+.gradio-container input, 
+.gradio-container textarea,
+.gradio-container .input-container {
+    background-color: rgba(10, 15, 30, 0.6) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    color: #f8fafc !important;
+    border-radius: 10px !important;
+}
+
 /* Code fonts */
 .code-container {
     font-family: 'JetBrains Mono', 'Fira Code', monospace !important;
-    background-color: #080c15 !important;
-    border: 1px solid rgba(255, 255, 255, 0.05) !important;
+    background-color: rgba(5, 8, 16, 0.8) !important;
+    border: 1px solid rgba(255, 255, 255, 0.06) !important;
     border-radius: 12px !important;
 }
 """
@@ -472,14 +495,15 @@ bug_options = get_trajectory_explorer_dropdowns(eval_data)
 with gr.Blocks(title="AgentDebuggerEnv Research Hub") as demo:
     
     # ── Header ────────────────────────────────────────────────────────────────
-    with gr.Group(elem_classes=["glass-header"]):
-        gr.Markdown(
-            """
-            # 🐞 AgentDebuggerEnv
-            ### Interactive Research Showcase & Leaderboard
-            *Aligning LLMs on Hypothesis-Driven Debugging using GRPO Reinforcement Learning*
-            """
-        )
+    gr.HTML(
+        """
+        <div class="glass-header">
+            <h1>🐞 AgentDebuggerEnv</h1>
+            <h3>Interactive Research Showcase & Leaderboard</h3>
+            <p>Aligning LLMs on Hypothesis-Driven Debugging using GRPO Reinforcement Learning</p>
+        </div>
+        """
+    )
         
     with gr.Tabs():
         # ── Tab 1: Trajectory Explorer ────────────────────────────────────────

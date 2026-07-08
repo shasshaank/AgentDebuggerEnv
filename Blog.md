@@ -191,4 +191,4 @@ We built this in a hackathon sprint. We think it's worth building further.
 
 Built by Team Endurance — Shashaank Jain & Pranav Pulipati — for the Scaler × Meta × PyTorch Hackathon.
 
-[Live Space](https://huggingface.co/spaces/shashaank0707/AgentDebugger-training-v3) · [W&B Run](https://wandb.ai/shashaankjain07-keshav-memorial-college-of-law/AgentDebuggerEnv/runs/vylbqd5m?nw=nwusershashaankjain07) · [GitHub: @PulipatiPranav](https://github.com/PulipatiPranav)
+[Live Space](https://huggingface.co/spaces/shashaank0707/AgentDebugger-training-v3) · [W&B Run](https://wandb.ai/shashaankjain07-keshav-memorial-college-of-law/AgentDebuggerEnv/runs/vylbqd5m?nw=nwusershashaankjain07) · [GitHub: @shasshaank](https://github.com/shasshaank)
