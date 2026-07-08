@@ -405,6 +405,13 @@ def get_bug_details(selected_name, eval_data):
         # Color-coded action badge
         action_color = "#8b5cf6" if step["action"] == "propose_fix" else "#3b82f6"
         
+        rb = step["reward_breakdown"]
+        format_val = rb.get("format_compliance", rb.get("format_match", 0.0))
+        hypothesis_val = rb.get("hypothesis_quality", 0.0)
+        localization_val = rb.get("localization", rb.get("syntax_correctness", 0.0))
+        fix_val = rb.get("fix_quality", rb.get("functionality_reward", 0.0))
+        semantic_val = rb.get("semantic_similarity", 0.0)
+
         markdown_out.append(f"""
 ### 🔄 TURN {step['turn']}
 ---
@@ -426,13 +433,13 @@ def get_bug_details(selected_name, eval_data):
 *   `Outcome`: **{"✅ SOLVED" if passed == total else "❌ STILL FAILING"}**
 
 **Dense Reward Breakdown:**
-- Format Compliance: `+{step['reward_breakdown'].get('format_compliance', 0.0):.3f}`
-- Hypothesis Quality: `+{step['reward_breakdown'].get('hypothesis_quality', 0.0):.3f}`
-- Localization: `+{step['reward_breakdown'].get('localization', 0.0):.3f}`
-- Fix Quality: `+{step['reward_breakdown'].get('fix_quality', 0.0):.3f}`
-- Semantic Similarity: `+{step['reward_breakdown'].get('semantic_similarity', 0.0):.3f}`
-- **Turn Total Reward: {sum(v for k, v in step['reward_breakdown'].items() if k != 'total'):.3f}**
-        """)
+- Format Compliance: `+{format_val:.3f}`
+- Hypothesis Quality: `+{hypothesis_val:.3f}`
+- Localization: `+{localization_val:.3f}`
+- Fix Quality: `+{fix_val:.3f}`
+- Semantic Similarity: `+{semantic_val:.3f}`
+- **Turn Total Reward: {sum(v for k, v in rb.items() if k != 'total'):.3f}**
+""")
         
     return buggy_code, initial_error, "\n\n".join(markdown_out)
 
