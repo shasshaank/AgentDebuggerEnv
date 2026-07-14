@@ -2,6 +2,13 @@
 
 Published evaluation results, kept in version control as a record.
 
+> **Read these with the caveat that they have no held-out split.** The trainer and
+> `evaluate-curriculum` both draw from all 90 bugs, so the solve rate below
+> measures how well the policy fit the training set, not whether it generalises.
+> These numbers are a record of a run, not evidence for any of the project's
+> claims — see [docs/research_plan.md](../docs/research_plan.md) for the experiment
+> design that would actually test them.
+
 | File | What it is |
 | --- | --- |
 | `qwen2.5-coder-3b-grpo.json` | The GRPO-trained `Qwen2.5-Coder-3B` adapter, scored on all 90 curriculum bugs. |

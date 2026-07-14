@@ -31,7 +31,7 @@ from agentdebugger.rewards import RewardBreakdown, TurnRewardCalculator, get_gra
 from agentdebugger.sandbox import SandboxPolicy, execute, run_test_cases
 from agentdebugger.tasks import get_task, list_tasks
 
-__version__ = "2.0.0"
+__version__ = "0.1.0"
 
 __all__ = [
     "DEFAULT_CURRICULUM",
