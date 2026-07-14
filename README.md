@@ -1,5 +1,9 @@
 # AgentDebuggerEnv
 
+[![CI](https://github.com/PulipatiPranav/AgentDebuggerEnv/actions/workflows/ci.yml/badge.svg)](https://github.com/PulipatiPranav/AgentDebuggerEnv/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
+
 **A reinforcement-learning environment that teaches language models to debug the way engineers do — observe, hypothesise, then fix — instead of guessing.** An agent is shown broken Python and real test output, must state a hypothesis before it is allowed to run a fix, and every submission executes in a resource-limited sandbox that scores what it actually did.
 
 <p align="center">
@@ -183,6 +187,21 @@ agentdebugger evaluate-curriculum --adapter <your-hf-repo>
 ```
 
 The trainer scales batch geometry to the detected GPU (T4 through H100) and swaps the bug pool at each curriculum boundary. It needs a CUDA GPU; everything else in this repository runs on CPU.
+
+## Research plan
+
+The three ideas this environment is built on — that structured Observation → Hypothesis → Action reasoning helps, that decomposing the reward helps, and that the curriculum prevents collapse — are **claims, not results**. [docs/research_plan.md](docs/research_plan.md) states each one as a falsifiable hypothesis with a null, a metric and an acceptance criterion, and specifies the smallest experiment matrix that could test them.
+
+Read it before citing anything in [results/](results/): the published run has **no train/held-out split**, so its solve rate measures how well the policy fit the training bugs, not whether it learned to debug. Fixing that is a precondition for the experiments, not one of them.
+
+## Contributing
+
+Contributions are welcome — start with [CONTRIBUTING.md](CONTRIBUTING.md) and the [good first issues](docs/good_first_issues.md). Release history is in [CHANGELOG.md](CHANGELOG.md).
+
+## Authors
+
+- **Shashaank Jain** ([@shasshaank](https://github.com/shasshaank))
+- **Pranav Pulipati** ([@PulipatiPranav](https://github.com/PulipatiPranav))
 
 ## License
 
