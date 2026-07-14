@@ -179,6 +179,12 @@ Per-bug evaluation results for the trained adapter are published in
 
 ## Limitations
 
+- **No held-out split.** `load_bugs()` returns every bug in the requested tiers,
+  and both the trainer and the evaluator call it — so the run above trains and
+  evaluates on the same 90 bugs. Its solve rate measures how well the policy fit
+  the training set, not whether it learned to debug. Nothing here should be read
+  as evidence for the claims in [research_plan.md](research_plan.md); fixing the
+  split is a precondition for the experiments described there.
 - **Single-file scope.** The environment operates on isolated functions, not
   multi-file repositories. Real bugs rarely present this cleanly; this is a
   training simplification, and the primary limit on real-world transfer.

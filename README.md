@@ -135,7 +135,7 @@ src/agentdebugger/
 ├── training/            # GRPO trainer, prompts, hardware-scaled batch geometry
 ├── serve/               # FastAPI server for the multi-step environment
 └── cli.py               # the `agentdebugger` command
-docs/                    # technical report and architecture notes
+docs/                    # technical report, architecture notes, research plan
 scripts/render_demo.py   # regenerates the README GIF from the live CLI
 tests/                   # sandbox, rewards, graders, environment, claim-critical tests
 results/                 # published evaluation results
