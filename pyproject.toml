@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agentdebugger"
-version = "2.0.0"
+version = "0.1.0"
 description = "A reinforcement learning environment where LLM agents debug Python code in a sandbox"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -58,6 +58,8 @@ dev = [
 Homepage = "https://github.com/PulipatiPranav/AgentDebuggerEnv"
 Repository = "https://github.com/PulipatiPranav/AgentDebuggerEnv"
 Report = "https://github.com/PulipatiPranav/AgentDebuggerEnv/blob/main/docs/report.md"
+Changelog = "https://github.com/PulipatiPranav/AgentDebuggerEnv/blob/main/CHANGELOG.md"
+Issues = "https://github.com/PulipatiPranav/AgentDebuggerEnv/issues"
 
 [project.scripts]
 agentdebugger = "agentdebugger.cli:main"
