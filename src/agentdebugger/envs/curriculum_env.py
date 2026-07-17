@@ -19,6 +19,7 @@ driving an environment object.
 from __future__ import annotations
 
 import random
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -42,6 +43,23 @@ CURRICULUM_POLICY = SandboxPolicy(limits=SandboxLimits(wall_clock_seconds=3.0, c
 #: re-running the buggy code on every turn. Bug records are immutable, so this
 #: is safe to keep for the life of the process.
 _BASELINES: dict[str, TestResults] = {}
+
+#: A fenced code block, optionally language-tagged. Instruction-tuned models wrap
+#: their fix in ```python ... ```; the fence markers are not valid Python, so the
+#: code inside must be extracted before it is executed, or every fenced fix scores
+#: zero regardless of correctness.
+_CODE_FENCE = re.compile(r"```[A-Za-z0-9_+-]*\n?(.*?)```", re.DOTALL)
+
+
+def extract_fix_code(detail: str) -> str:
+    """Return runnable code from a DETAIL field, unwrapping a code fence if present.
+
+    If the field contains one or more fenced blocks, the first is used (a fix is a
+    single function); otherwise the field is returned unchanged, so a model that
+    correctly emits bare code is unaffected.
+    """
+    match = _CODE_FENCE.search(detail)
+    return match.group(1).strip() if match else detail
 
 
 def baseline_results(bug: Bug) -> TestResults:
@@ -88,7 +106,8 @@ def score_response(
 
     cases = [case.as_dict() for case in bug.test_cases]
     if output.action == "propose_fix" and cases:
-        tests = run_test_cases(output.detail, bug.function_name, cases, policy=CURRICULUM_POLICY)
+        fix_code = extract_fix_code(output.detail)
+        tests = run_test_cases(fix_code, bug.function_name, cases, policy=CURRICULUM_POLICY)
         broken = tests.newly_broken(baseline_results(bug))
     else:
         tests = TestResults(total=0)

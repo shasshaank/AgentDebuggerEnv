@@ -39,6 +39,7 @@ import os
 import re
 import sys
 from pathlib import Path
+from typing import Any
 
 from agentdebugger.config import TIERS
 from agentdebugger.dataset import Bug, load_bugs
@@ -171,17 +172,30 @@ def score_bugs(generate, name: str, bugs: list[Bug], on_bug=None, sleep: float =
     from collections import defaultdict
 
     per_tier: dict[int, dict[str, float]] = defaultdict(lambda: {"total": 0, "solved": 0, "reward": 0.0})
+    records: list[dict[str, Any]] = []
     for index, bug in enumerate(bugs, start=1):
-        outcome = score_response(bug, generate(bug_to_prompt(bug)))
+        completion = generate(bug_to_prompt(bug))
+        outcome = score_response(bug, completion)
         stats = per_tier[bug.tier]
         stats["total"] += 1
         stats["solved"] += int(outcome.solved)
         stats["reward"] += outcome.reward.total
+        records.append(
+            {
+                "id": bug.id,
+                "tier": bug.tier,
+                "solved": outcome.solved,
+                "action": outcome.output.action,
+                "tests": outcome.tests.as_dict(),
+                "reward": outcome.reward.as_dict(),
+                "completion": completion,
+            }
+        )
         if on_bug is not None:
             on_bug(index, len(bugs), bug)
         if sleep and index < len(bugs):
             time.sleep(sleep)
-    return per_tier
+    return per_tier, records
 
 
 def make_oracle_generator(bugs: list[Bug]):
@@ -251,7 +265,7 @@ def main(argv: list[str] | None = None) -> int:
     def progress(done: int, total: int, bug) -> None:
         print(f"\r  scoring {name} on {scope}: {done}/{total} bugs", end="", flush=True)
 
-    per_tier = score_bugs(generate, name, bugs, on_bug=progress, sleep=args.sleep)
+    per_tier, records = score_bugs(generate, name, bugs, on_bug=progress, sleep=args.sleep)
 
     total = sum(s["total"] for s in per_tier.values())
     solved = sum(s["solved"] for s in per_tier.values())
@@ -295,6 +309,7 @@ def main(argv: list[str] | None = None) -> int:
                 }
                 for tier in sorted(per_tier)
             },
+            "completions": records,
         }
         Path(args.output).parent.mkdir(parents=True, exist_ok=True)
         Path(args.output).write_text(json.dumps(report, indent=2), encoding="utf-8")
