@@ -68,6 +68,9 @@ def test_unknown_format_is_rejected():
 
 
 def test_build_dataset_free_form_uses_the_free_form_prompt():
+    import pytest
+
+    pytest.importorskip("datasets")
     from agentdebugger.training.prompts import FREE_FORM_SYSTEM_PROMPT
 
     dataset = build_dataset(step=0, split="train", format="free_form")
