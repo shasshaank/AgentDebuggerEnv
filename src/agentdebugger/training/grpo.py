@@ -280,11 +280,67 @@ def build_dataset(
     )
 
 
+def curriculum_stages(schedule: CurriculumSchedule, max_steps: int) -> list[tuple[int, int]]:
+    """The ``[(start_step, end_step), ...]`` ranges a run of ``max_steps`` splits into.
+
+    Pure and GPU-independent so it is unit-tested directly (see ``train()``'s
+    docstring for *why* training must be split this way rather than swapping
+    ``trainer.train_dataset`` mid-run).
+    """
+    boundaries = sorted(step for step in schedule.advances_at() if 0 < step < max_steps)
+    starts = [0, *boundaries]
+    ends = [*boundaries, max_steps]
+    return list(zip(starts, ends, strict=True))
+
+
+def _build_lora_model(model, profile: HardwareProfile, adapter_dir: str | None) -> Any:
+    """Attach a fresh LoRA adapter, or reload one carried over from a prior curriculum stage."""
+    from peft import LoraConfig, PeftModel, TaskType, get_peft_model
+
+    if adapter_dir is None:
+        model = get_peft_model(
+            model,
+            LoraConfig(
+                r=profile.lora_rank,
+                lora_alpha=profile.lora_rank * 2,
+                target_modules=[
+                    "q_proj", "k_proj", "v_proj", "o_proj",
+                    "gate_proj", "up_proj", "down_proj",
+                ],
+                lora_dropout=0.0,
+                bias="none",
+                task_type=TaskType.CAUSAL_LM,
+            ),
+        )
+    else:
+        model = PeftModel.from_pretrained(model, adapter_dir, is_trainable=True)
+    model.enable_input_require_grads()
+    model.gradient_checkpointing_enable()
+    return model
+
+
 def train(config: TrainingConfig) -> None:
-    """Run GRPO training end to end."""
+    """Run GRPO training end to end, one :class:`~trl.GRPOTrainer` per curriculum stage.
+
+    **Why per-stage trainers, not one trainer with a dataset-swapping callback:**
+    TRL/transformers builds the train dataloader's sampler exactly once per
+    ``Trainer.train()`` call, and that sampler (``RepeatRandomSampler``) caches
+    ``len(dataset)`` at *construction* time. A callback that reassigns
+    ``trainer.train_dataset`` mid-run (the previous approach here) never reaches
+    that sampler — the already-built dataloader keeps iterating over the original
+    dataset object, so the bug pool silently never grows past tier 1 for the
+    entire run. Starting a new, short-lived trainer at each curriculum boundary
+    and carrying the LoRA adapter forward (`PeftModel.from_pretrained(...,
+    is_trainable=True)`) is what actually makes the tier unlock real. Each stage
+    already checkpoints to disk with a ``.stage_complete`` marker, so a run that
+    dies partway through (e.g. a preemptible/spot GPU) can be restarted and will
+    skip whatever stages already finished.
+    """
+    import shutil
+    from pathlib import Path
+
     import torch
-    from peft import LoraConfig, TaskType, get_peft_model
-    from transformers import AutoModelForCausalLM, AutoTokenizer, TrainerCallback
+    from transformers import AutoModelForCausalLM, AutoTokenizer
     from trl import GRPOConfig, GRPOTrainer
 
     vram_gb = (
@@ -308,72 +364,88 @@ def train(config: TrainingConfig) -> None:
     tokenizer.pad_token = tokenizer.pad_token or tokenizer.eos_token
     tokenizer.padding_side = "left"
 
-    model = AutoModelForCausalLM.from_pretrained(config.model, device_map="auto", dtype=dtype)
-    model.config.use_cache = False
-    model = get_peft_model(
-        model,
-        LoraConfig(
-            r=profile.lora_rank,
-            lora_alpha=profile.lora_rank * 2,
-            target_modules=[
-                "q_proj", "k_proj", "v_proj", "o_proj",
-                "gate_proj", "up_proj", "down_proj",
-            ],
-            lora_dropout=0.0,
-            bias="none",
-            task_type=TaskType.CAUSAL_LM,
-        ),
-    )
-    model.enable_input_require_grads()
-    model.gradient_checkpointing_enable()
-    print(f"Trainable parameters: {model.num_parameters(only_trainable=True):,}", flush=True)
+    stages = curriculum_stages(config.schedule, config.max_steps)
+    out_root = Path(config.output_dir)
+    adapter_dir: str | None = None
 
-    trainer = GRPOTrainer(
-        model=model,
-        args=GRPOConfig(
-            output_dir=config.output_dir,
-            max_steps=config.max_steps,
-            per_device_train_batch_size=profile.batch_size,
-            gradient_accumulation_steps=profile.gradient_accumulation_steps,
-            num_generations=profile.num_generations,
-            max_completion_length=profile.max_completion_length,
-            learning_rate=config.learning_rate,
-            lr_scheduler_type="cosine",
-            warmup_steps=config.warmup_steps,
-            temperature=config.temperature,
-            logging_steps=config.logging_steps,
-            save_steps=config.save_steps,
-            save_strategy="steps",
-            seed=config.seed,
-            report_to="wandb" if _wandb_active() else "none",
-        ),
-        train_dataset=build_dataset(0, config.schedule, config.split, config.format),
-        reward_funcs=make_reward_function(
-            config.schedule, config.reward_config, config.format, config.reward_workers
-        ),
-        processing_class=tokenizer,
-    )
+    for stage_index, (stage_start, stage_end) in enumerate(stages):
+        tiers = config.schedule.tiers_at(stage_start)
+        stage_dir = out_root / f"_stage{stage_index}"
+        done_marker = stage_dir / ".stage_complete"
 
-    class CurriculumCallback(TrainerCallback):
-        """Swap the bug pool when the schedule says the next tier unlocks."""
+        print(
+            f"\n[curriculum] stage {stage_index}: steps {stage_start}-{stage_end} "
+            f"({stage_end - stage_start} steps), tiers {tiers}",
+            flush=True,
+        )
 
-        def on_step_end(self, args, state, control, **kwargs):
-            if state.global_step in config.schedule.advances_at():
-                tiers = config.schedule.tiers_at(state.global_step)
-                trainer.train_dataset = build_dataset(
-                    state.global_step, config.schedule, config.split, config.format
-                )
-                print(f"\n[curriculum] step {state.global_step}: tiers {tiers}", flush=True)
+        if done_marker.exists():
+            print(f"[curriculum] stage {stage_index} already complete, reusing {stage_dir}", flush=True)
+            adapter_dir = str(stage_dir)
+            continue
 
-    trainer.add_callback(CurriculumCallback())
-    trainer.train()
+        model = AutoModelForCausalLM.from_pretrained(config.model, device_map="auto", dtype=dtype)
+        model.config.use_cache = False
+        model = _build_lora_model(model, profile, adapter_dir)
+        if stage_index == 0:
+            print(f"Trainable parameters: {model.num_parameters(only_trainable=True):,}", flush=True)
 
-    trainer.save_model(config.output_dir)
+        trainer = GRPOTrainer(
+            model=model,
+            args=GRPOConfig(
+                output_dir=str(stage_dir),
+                max_steps=stage_end - stage_start,
+                per_device_train_batch_size=profile.batch_size,
+                gradient_accumulation_steps=profile.gradient_accumulation_steps,
+                num_generations=profile.num_generations,
+                max_completion_length=profile.max_completion_length,
+                learning_rate=config.learning_rate,
+                lr_scheduler_type="cosine",
+                # Only the first stage warms up; later stages continue from an
+                # already-warm policy, so restarting the warmup would just spike
+                # the LR right after a curriculum tier unlock.
+                warmup_steps=config.warmup_steps if stage_index == 0 else 0,
+                temperature=config.temperature,
+                logging_steps=config.logging_steps,
+                save_steps=config.save_steps,
+                save_strategy="steps",
+                seed=config.seed,
+                report_to="wandb" if _wandb_active() else "none",
+            ),
+            train_dataset=build_dataset(stage_start, config.schedule, config.split, config.format),
+            reward_funcs=make_reward_function(
+                config.schedule, config.reward_config, config.format, config.reward_workers
+            ),
+            processing_class=tokenizer,
+        )
+        trainer.train()
+
+        stage_dir.mkdir(parents=True, exist_ok=True)
+        trainer.save_model(str(stage_dir))
+        done_marker.touch()
+        adapter_dir = str(stage_dir)
+
+        del trainer, model
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+    # `adapter_dir` now holds the last stage's adapter; publish it as the run's
+    # output so `--adapter <output_dir>` keeps working exactly as before. Skip
+    # subdirectories (each stage's intermediate `checkpoint-*` saves live there
+    # too) - only the adapter files saved by `trainer.save_model` belong at the
+    # top level.
+    assert adapter_dir is not None
+    for item in Path(adapter_dir).iterdir():
+        if item.is_file():
+            shutil.copy2(item, out_root / item.name)
     tokenizer.save_pretrained(config.output_dir)
     print(f"Saved adapter to {config.output_dir}", flush=True)
 
     if config.push_to_hub:
-        model.push_to_hub(config.push_to_hub)
+        from peft import AutoPeftModelForCausalLM
+
+        final_model = AutoPeftModelForCausalLM.from_pretrained(config.output_dir)
+        final_model.push_to_hub(config.push_to_hub)
         tokenizer.push_to_hub(config.push_to_hub)
         print(f"Pushed to https://huggingface.co/{config.push_to_hub}", flush=True)
 
