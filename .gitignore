@@ -45,3 +45,5 @@ calibration_run.ipynb
 *.aux
 *.out
 scratch/
+
+.agents/
