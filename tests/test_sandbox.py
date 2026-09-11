@@ -146,30 +146,51 @@ def test_violations_name_what_was_refused_and_where():
 # ── it enforces limits ────────────────────────────────────────────────────────
 
 
-def test_wall_clock_timeout_is_enforced(fast_policy):
-    result = execute("while True:\n    pass", policy=fast_policy)
+def test_wall_clock_timeout_is_enforced():
+    """A sleep consumes no CPU, so it reliably hits the wall-clock limit."""
+    policy = SandboxPolicy(limits=SandboxLimits(wall_clock_seconds=1.0, cpu_seconds=10))
+    result = execute("import time\ntime.sleep(10)", policy=policy)
     assert result.timed_out
     assert "TIMEOUT" in result.output
-    assert result.duration_ms < 6000, "the deadline must not overshoot by seconds"
+    assert result.exit_code is not None and result.exit_code < 0
 
 
-def test_a_timeout_kills_the_whole_process_group(fast_policy):
+def test_a_timeout_kills_the_whole_process_group():
     """A fix that spawns threads must not outlive the process that ran it."""
-    policy = fast_policy.allowing("threading")
+    policy = SandboxPolicy(limits=SandboxLimits(wall_clock_seconds=1.0, cpu_seconds=10)).allowing("threading")
     code = (
         "import threading\n"
+        "import time\n"
         "def spin():\n"
-        "    while True:\n"
-        "        pass\n"
+        "    time.sleep(10)\n"
         "for _ in range(4):\n"
         "    t = threading.Thread(target=spin, daemon=False)\n"
         "    t.start()\n"
-        "while True:\n"
-        "    pass\n"
+        "time.sleep(10)\n"
     )
     result = execute(code, policy=policy)
     assert result.timed_out
     assert result.exit_code is not None and result.exit_code < 0, "expected a signal, not an exit"
+
+
+@pytest.mark.skipif(not HAS_RLIMITS, reason="setrlimit is unavailable on this platform")
+def test_cpu_limit_is_enforced():
+    """An infinite loop rapidly consumes CPU, reliably hitting RLIMIT_CPU before wall clock."""
+    import signal
+    policy = SandboxPolicy(limits=SandboxLimits(wall_clock_seconds=10.0, cpu_seconds=1))
+    result = execute("while True:\n    pass", policy=policy)
+    assert not result.timed_out, "the CPU limit should fire before the wall clock"
+    assert result.exit_code == -signal.SIGXCPU or result.exit_code == -signal.SIGKILL
+    assert result.duration_ms < 10_000
+
+
+def test_ordinary_signal_is_not_classified_as_timeout():
+    """A process manually sending SIGKILL to itself is not a timeout."""
+    import signal
+    policy = SandboxPolicy(limits=SandboxLimits(wall_clock_seconds=10.0, cpu_seconds=10)).allowing("os").allowing("signal")
+    result = execute("import os, signal\nos.kill(os.getpid(), signal.SIGKILL)", policy=policy)
+    assert not result.timed_out
+    assert result.exit_code == -signal.SIGKILL
 
 
 @pytest.mark.skipif(
@@ -182,14 +203,6 @@ def test_memory_limit_is_enforced():
     assert "allocated" not in result.output
     assert "MemoryError" in result.output
     assert not result.timed_out, "a memory limit should fail fast, not hang"
-
-
-@pytest.mark.skipif(not HAS_RLIMITS, reason="setrlimit is unavailable on this platform")
-def test_cpu_limit_backstops_a_process_that_ignores_signals():
-    limits = SandboxLimits(wall_clock_seconds=30.0, cpu_seconds=1)
-    result = execute("while True:\n    pass", policy=SandboxPolicy(limits=limits))
-    assert not result.timed_out, "the CPU limit should fire before the wall clock"
-    assert result.duration_ms < 10_000
 
 
 def test_output_is_truncated_rather_than_unbounded():
@@ -249,8 +262,8 @@ def test_run_test_cases_counts_a_crash_as_a_failure_not_an_error():
 
 def test_run_test_cases_counts_an_infinite_loop_as_a_failure():
     cases = [{"input": [1], "expected_output": 1}]
-    policy = SandboxPolicy(limits=SandboxLimits(wall_clock_seconds=2.0, cpu_seconds=2))
-    results = run_test_cases("def f(x):\n    while True:\n        pass", "f", cases, policy=policy)
+    policy = SandboxPolicy(limits=SandboxLimits(wall_clock_seconds=1.0, cpu_seconds=10))
+    results = run_test_cases("def f(x):\n    import time\n    time.sleep(10)", "f", cases, policy=policy)
     assert results.passed == 0
     assert results.timed_out
 

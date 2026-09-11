@@ -9,6 +9,7 @@ them changes percentile endpoints by small amounts.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Mapping, Sequence
@@ -21,6 +22,13 @@ DATASET = ROOT / "src" / "agentdebugger" / "dataset" / "bugs"
 N_BOOT = 10_000
 SEED = 204
 SEEDS = (42, 123, 456)
+
+
+def _get_deterministic_rng(base_seed: int, comparison_name: str) -> np.random.Generator:
+    hash_input = f"{base_seed}:{comparison_name}".encode("utf-8")
+    hash_digest = hashlib.sha256(hash_input).digest()
+    seed_int = int.from_bytes(hash_digest[:8], byteorder="big")
+    return np.random.default_rng(seed_int)
 
 
 def load(path: Path) -> dict[str, int]:
@@ -87,9 +95,9 @@ def main() -> None:
         ("B1-B0", b1, b0),
     )
 
-    rng = np.random.default_rng(SEED)
     print("comparison,estimate_pp,ci_low_pp,ci_high_pp")
     for name, a, b in comparisons:
+        rng = _get_deterministic_rng(SEED, name)
         diff = paired_difference(a, b, bug_ids)
         estimate, lo, hi = bootstrap_ci(diff, rng)
         print(f"{name},{estimate * 100:.1f},{lo * 100:.1f},{hi * 100:.1f}")
